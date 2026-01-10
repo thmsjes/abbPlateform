@@ -40,3 +40,17 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Universal Reset for Outlines and Link Colors */
+button, a, button:focus, a:focus, button:hover, a:hover {
+    outline: none !important;
+    outline-color: transparent !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Forces Guest Portal to stay white/theme-color instead of browser purple */
+a {
+    color: inherit;
+}

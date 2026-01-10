@@ -35,7 +35,7 @@ const Login = () => {
               {/* FIXED: Using img tag instead of calling PNG as a component */}
               <img src={LogoEmblem} alt="STRway Logo" className="w-8 h-8 object-contain" />
             </div>
-            <span className="text-xl font-bold tracking-tight uppercase">STRway</span>
+            <span className="text-xl font-bold tracking-tight">STRway</span>
           </div>
           
           <div>

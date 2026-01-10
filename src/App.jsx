@@ -1,24 +1,25 @@
 import React from 'react'
 import './App.css'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Import the components
 import GuestLandingPage from './pages/GuestLandingPage';
 import PortalPicker from './pages/PortalPicker';
 import OwnerPortal from './pages/OwnerPortal';
-import Login from './pages/LoginPage'; // Make sure to create this file!
+import Login from './pages/LoginPage'; 
+import GuestLogin from './pages/GuestLoginPage';
+import GuestDashboard from './pages/GuestDashboardPage';
+import Navbar from './pages/Navbar';
 
 // 1. Create the ProtectedRoute Wrapper
 const ProtectedRoute = ({ children, allowedRole }) => {
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('userRole');
 
-  // If no token, send to login
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  // If role doesn't match, send back to portal selection
   if (allowedRole && userRole !== allowedRole) {
     return <Navigate to="/portals" replace />;
   }
@@ -26,12 +27,25 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   return children;
 };
 
-function App() {
+// 2. NEW: Wrapper component to handle conditional Navbar rendering
+const AppContent = () => {
+  const location = useLocation();
+  
+  // Define all paths where the Navbar should NOT appear
+  const hideNavbarPaths = ['/guest-login', '/guest-dashboard', '/login', '/portals'];
+  
+  const shouldShowNavbar = !hideNavbarPaths.includes(location.pathname);
+
   return (
-    <Router>
+    <>
+      {/* Navbar only renders if the current path isn't in our "hide" list */}
+      {shouldShowNavbar && <Navbar />}
+      
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<GuestLandingPage />} />
+        <Route path="/guest-login" element={<GuestLogin />} />
+        <Route path="/guest-dashboard" element={<GuestDashboard />} />  
         <Route path="/login" element={<Login />} />
         <Route path="/portals" element={<PortalPicker />} />
 
@@ -50,7 +64,7 @@ function App() {
           path="/cleaner" 
           element={
             <ProtectedRoute allowedRole="cleaner">
-              <div className="p-10 text-2xl font-bold">Cleaner Portal Coming Soon!</div>
+              <div className="p-10 text-2xl font-bold text-center">Cleaner Portal Coming Soon!</div>
             </ProtectedRoute>
           } 
         />
@@ -60,11 +74,20 @@ function App() {
           path="/maintenance" 
           element={
             <ProtectedRoute allowedRole="maintenance">
-              <div className="p-10 text-2xl font-bold">Maintenance Ticket System Coming Soon!</div>
+              <div className="p-10 text-2xl font-bold text-center">Maintenance Ticket System Coming Soon!</div>
             </ProtectedRoute>
           } 
         />
       </Routes>
+    </>
+  );
+};
+
+// 3. Main App Component
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }
