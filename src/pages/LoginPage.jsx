@@ -1,56 +1,93 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
-// Import the logo image
+import { Lock, FolderPen, ArrowRight, ShieldCheck } from 'lucide-react';
+import { jwtDecode } from 'jwt-decode';
 import LogoEmblem from "../assets/STRemblem.png"; 
+// 1. Import your API call
+import { login } from '../apiCalls'; 
 
 const Login = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(''); // This acts as your 'Username'
   const [password, setPassword] = useState('');
+  const [error, setError] = useState(''); // To display login failures
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate(); 
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // Simulate API logic
-    localStorage.setItem('userRole', 'owner'); 
-    localStorage.setItem('token', 'valid-session-token');
-    navigate('/owner');
+    setError('');
+    setLoading(true);
+
+    try {
+      // 2. Map the fields to match your .NET LoginRequestDTO
+      const credentials = {
+        username: username, // Your backend expects 'Username'
+        password: password
+      };
+
+      const data = await login(credentials);
+      console.log('Login response:', data);
+      if (data.isSuccess) {
+        // 3. Store the real JWT and user data from the backend
+        localStorage.setItem('token', data.token);
+      
+        // 4. Decode the JWT to get the user's access level
+        try {
+          const decoded = jwtDecode(data.token);
+          const accessLevel = decoded["AccessLevel"]; // Adjust this key based on your JWT structure
+
+          
+          // Map access level to role and store in localStorage for ProtectedRoute
+          let userRole;
+          switch (accessLevel) {
+            case '1':
+            case 1:
+              userRole = 'owner';
+              console.log('Setting userRole to owner');
+              localStorage.setItem('userRole', userRole);
+              navigate('/owner');
+              break;
+            case '2':
+            case 2:
+              userRole = 'cleaner';
+              localStorage.setItem('userRole', userRole);
+              navigate('/cleaner');
+              break;
+            case '3':
+            case 3:
+              userRole = 'maintenance';
+              localStorage.setItem('userRole', userRole);
+              navigate('/maintenance');
+              break;
+            default:
+              console.log('Unknown access level, going to portals');
+              // If access level is not recognized, go to portal picker
+              navigate('/portals');
+              return; // Exit early, don't set userRole
+          }
+          
+          console.log('About to navigate to portal for userRole:', userRole);
+          
+        } catch (decodeError) {
+          // If token decode fails, just go to portals page
+          console.error('Error decoding token:', decodeError);
+          navigate('/portals');
+        }
+      } else {
+        setError('Invalid username or password.');
+      }
+    } catch (error) {
+      setError('Connection failed. Please check if the server is running.');
+      console.error('Login error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen flex bg-white font-sans">
-      {/* LEFT SIDE: Visual Brand Area */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        {/* Use /assets/ if the folder is in 'public', or use an import if in 'src' */}
-        <img 
-          src="/assets/STRlogin.jpg" 
-          alt="Modern Home" 
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-blue-900/40 backdrop-blur-[2px]" />
-        
-        <div className="relative z-10 p-12 flex flex-col justify-between text-white">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg backdrop-blur-md">
-              {/* FIXED: Using img tag instead of calling PNG as a component */}
-              <img src={LogoEmblem} alt="STRway Logo" className="w-8 h-8 object-contain" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">STRway</span>
-          </div>
-          
-          <div>
-            <h2 className="text-5xl font-extrabold mb-6 leading-tight">
-              Manage your <br /> property with <br /> confidence.
-            </h2>
-            <p className="text-blue-50 max-w-md text-lg">
-              The all-in-one portal for owners, maintenance teams, and cleaning staff.
-            </p>
-          </div>
-          <p className="text-sm opacity-70 italic">© 2026 STRway Management Systems</p>
-        </div>
-      </div>
+      {/* ... LEFT SIDE remains the same ... */}
 
-      {/* RIGHT SIDE: Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-16">
         <div className="max-w-md w-full">
           <div className="mb-10 text-center lg:text-left">
@@ -58,21 +95,34 @@ const Login = () => {
             <p className="text-gray-500">Enter your credentials to access your dashboard</p>
           </div>
 
+          {/* 4. Display Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 text-sm font-bold">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-5">
+            {/* Email/Username Input */}
             <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-700 ml-1">Work Email</label>
+              {/* Added 'block' to take full width and 'text-left' to align text */}
+              <label className="block text-left text-sm font-bold text-gray-700 ml-1">
+                User Name
+              </label>
               <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                <FolderPen className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input 
-                  type="email" 
+                  type="text" // 'username' is not a standard HTML type, use 'text'
                   required 
                   className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
-                  placeholder="name@property.com"
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="John Doe"
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading}
                 />
               </div>
             </div>
 
+            {/* Password Input */}
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
                 <label className="text-sm font-bold text-gray-700">Password</label>
@@ -86,12 +136,17 @@ const Login = () => {
                   className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
                   placeholder="••••••••"
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
                 />
               </div>
             </div>
 
-            <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-2xl font-black hover:bg-blue-600 shadow-xl shadow-gray-200 hover:shadow-blue-200 transition-all flex items-center justify-center gap-2 transform active:scale-[0.98]">
-              Sign In to Portal <ArrowRight size={20} />
+            <button 
+              type="submit" 
+              disabled={loading}
+              className={`w-full ${loading ? 'bg-pink-400' : 'bg-gray-900 hover:bg-blue-600'} text-white py-4 rounded-2xl font-black shadow-xl transition-all flex items-center justify-center gap-2 transform active:scale-[0.98]`}
+            >
+              {loading ? 'Authenticating...' : 'Sign In to Portal'} <ArrowRight size={20} />
             </button>
           </form>
 

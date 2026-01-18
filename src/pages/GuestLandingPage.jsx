@@ -14,6 +14,8 @@ import Sunset from '../assets/Sunset.jpg';
 
 const GuestLandingPage = () => {
   const [selectedImg, setSelectedImg] = useState(null);
+  const [selectedAmenity, setSelectedAmenity] = useState(null);
+
 
   const propertyImages = [
     { url: BackYard },
@@ -21,6 +23,22 @@ const GuestLandingPage = () => {
     { url: DinningRoom },
     { url: Sunset },
   ];
+
+  //Property Ammenities Data
+  const amenitiesList = [
+  { icon: <Waves />, label: "Waterfront", desc: "Private access to Sylvan Lake. Perfect for morning swims or watching the sunrise." },
+  { icon: <Lock />, label: "Private Dock", desc: "Our 23 x 23 wooden dock is available for your boat, or just for lounging. Offering mooring poles and deep water access to the Erie Canal and Lake Oneida." },
+  { icon: <Wind />, label: "Air Conditioning", desc: "Central cooling throughout the home to keep you comfortable in the summer heat." },
+  { icon: <Dog />, label: "Pet Friendly", desc: "We welcome up to 2 well-behaved dogs. The yard is fully prepared for them!" },
+  { icon: <Fence />, label: "Fully Fenced Yard", desc: "A safe, enclosed space for children and pets to play safely outdoors." },
+  { icon: <WashingMachine />, label: "On-Site Laundry", desc: "Full-sized washer and dryer available. We provide detergent and dryer sheets." },
+  { icon: <Wifi />, label: "Fast WiFi", desc: "High-speed Starlink internet—reliable enough for video calls or streaming movies." },
+  { icon: <Coffee />, label: "Coffee Station", desc: "Fully stocked with a Keurig, local ground coffee, creamers, and various teas." },
+  { icon: <KeyRound />, label: "Self Check-in", desc: "Check yourself in with our secure smart lock. Your code will be sent 24 hours before arrival." },
+  { icon: <Kayak />, label: "3 Kayaks", desc: "We provide 3 adult kayaks and life jackets for guest use at no extra charge." },
+  { icon: <Bike />, label: "2 Bicycles", desc: "Two cruiser bikes available to explore the local trails and neighborhood." },
+  { icon: <BedDouble />, label: "Sleeps 11", desc: "5 bedrooms featuring premium memory foam mattresses and 100% cotton linens." },
+];
 
   // Review Data
   const reviews = [
@@ -47,6 +65,7 @@ const GuestLandingPage = () => {
     }
   ];
 
+  // Guest Photos Data
   const guestPhotos = [
     { url: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?q=80&w=600', caption: "Morning coffee on the dock ☕" },
     { url: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=600', caption: "Kids loved the kayaks!" },
@@ -74,18 +93,11 @@ const GuestLandingPage = () => {
         <section className="mb-16">
           <h2 className="text-3xl font-bold mb-6 text-gray-800">What our home offers</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <AmenityItem icon={<Waves />} label="Waterfront" /> 
-            <AmenityItem icon={<Lock />} label="Private Dock" /> 
-            <AmenityItem icon={<Wind />} label="Air Conditioning" />
-            <AmenityItem icon={<Dog />} label="Pet Friendly" />            
-            <AmenityItem icon={<Fence />} label="Fully Fenced Yard" />            
-            <AmenityItem icon={<WashingMachine />} label="On-Site Laundry" />
-            <AmenityItem icon={<Wifi />} label="Fast WiFi" />
-            <AmenityItem icon={<Coffee />} label="Coffee Station" />
-            <AmenityItem icon={<KeyRound />} label="Self Check-in" />
-            <AmenityItem icon={<Kayak />} label="3 Kayaks" />
-            <AmenityItem icon={<Bike />} label="2 Bicycles" />
-            <AmenityItem icon={<BedDouble />} label="Sleeps 11" />
+            {amenitiesList.map((item, idx) => (
+              <div key={idx} onClick={() => setSelectedAmenity(item)} className="cursor-pointer">
+                <AmenityItem icon={item.icon} label={item.label} />
+              </div>
+            ))}
           </div>
         </section>
 
@@ -181,6 +193,43 @@ const GuestLandingPage = () => {
           </div>
         </section>
 
+       {/* AMENITY DESCRIPTION MODAL */} 
+        {selectedAmenity && (
+          <div 
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setSelectedAmenity(null)}
+          >
+            <div 
+              className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in duration-200"
+              onClick={(e) => e.stopPropagation()} 
+            >
+              {/* Icon with specialized pink styling */}
+              <div className="text-pink-500 mb-6 flex justify-center">
+                <div className="p-4 bg-pink-50 rounded-2xl scale-[1.5]">
+                  {selectedAmenity.icon}
+                </div>
+              </div>
+
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                  {selectedAmenity.label}
+                </h3>
+
+                <p className="text-gray-600 leading-relaxed mb-8">
+                  {selectedAmenity.desc}
+                </p>
+
+               <button 
+          onClick={() => setSelectedAmenity(null)}
+          className="w-full bg-gray-900 text-pink-500 py-3 rounded-xl font-bold transition-all duration-300 shadow-lg active:scale-95 border-none outline-none focus:outline-none focus:ring-0 hover:!bg-blue-600 hover:!text-white"
+        >
+          Got it
+        </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* 5. PHOTO MODAL */}
         {selectedImg && (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setSelectedImg(null)}>
@@ -191,74 +240,74 @@ const GuestLandingPage = () => {
       </main>
 
       {/* 5. EXTERNAL BOOKING SECTION */}
-{/* 5. THEMED BOOKING SECTION */}
-<section className="mb-24 px-4">
-  <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-8 md:p-12 text-center shadow-xl border border-pink-50 relative overflow-hidden">
-    {/* Subtle decorative background glow */}
-    <div className="absolute -top-24 -right-24 w-64 h-64 bg-pink-100/50 rounded-full blur-3xl" />
-    
-    <div className="relative z-10">
-      <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4 tracking-tight">
-        Ready to visit Serenity on Sylvan?
-      </h2>
-      <p className="text-gray-500 mb-10 max-w-lg mx-auto font-medium">
-        Book directly with us for the best rates, or use your favorite booking platform.
-      </p>
 
-      <div className="flex flex-col gap-6 items-center justify-center">
-        {/* PRIMARY: DIRECT BOOKING */}
-        <button 
-          onClick={() => window.location.href = 'mailto:your-email@example.com?subject=Booking Inquiry for Serenity on Sylvan'}
-          className="
-            flex items-center justify-center gap-2
-            text-sm font-black uppercase tracking-[0.25em] 
-            text-pink-500 hover:!text-blue-500 
-            transition-colors duration-300 whitespace-nowrap
-            bg-transparent border-none p-0 
-            outline-none focus:outline-none focus:ring-0
-            cursor-pointer no-underline
-          "
-          style={{ outline: 'none', background: 'none', border: 'none', boxShadow: 'none' }}
->       
-          <Camera size={18} strokeWidth={2.5} />
-          Book Directly with Host
-        </button>
+      <section className="mb-24 px-4">
+        <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-8 md:p-12 text-center shadow-xl border border-pink-50 relative overflow-hidden">
+          {/* Subtle decorative background glow */}
+          <div className="absolute -top-24 -right-24 w-64 h-64 bg-pink-100/50 rounded-full blur-3xl" />
 
-        <div className="flex flex-col sm:flex-row gap-4 w-full justify-center items-center">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Or find us on:</span>
-          
-          {/* SECONDARY: Airbnb */}
-          <a 
-            href="https://airbnb.com/h/your-property-link" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-sm transition-all"
-          >
-            Airbnb
-          </a>
+          <div className="relative z-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4 tracking-tight">
+              Ready to visit Serenity on Sylvan?
+            </h2>
+            <p className="text-gray-500 mb-10 max-w-lg mx-auto font-medium">
+              Book directly with us for the best rates, or use your favorite booking platform.
+            </p>
 
-          {/* SECONDARY: VRBO */}
-          <a 
-            href="https://vrbo.com/your-property-id" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-sm transition-all"
-          >
-            VRBO
-          </a>
+            <div className="flex flex-col gap-6 items-center justify-center">
+              {/* PRIMARY: DIRECT BOOKING */}
+              <button 
+                onClick={() => window.location.href = 'mailto:your-email@example.com?subject=Booking Inquiry for Serenity on Sylvan'}
+                className="
+                  flex items-center justify-center gap-2
+                  text-sm font-black uppercase tracking-[0.25em] 
+                  text-pink-500 hover:!text-blue-500 
+                  transition-colors duration-300 whitespace-nowrap
+                  bg-transparent border-none p-0 
+                  outline-none focus:outline-none focus:ring-0
+                  cursor-pointer no-underline
+                "
+                style={{ outline: 'none', background: 'none', border: 'none', boxShadow: 'none' }}
+      >       
+                <Camera size={18} strokeWidth={2.5} />
+                Book Directly with Host
+              </button>
+
+              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center items-center">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Or find us on:</span>
+
+                {/* SECONDARY: Airbnb */}
+                <a 
+                  href="https://airbnb.com/h/your-property-link" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-sm transition-all"
+                >
+                  Airbnb
+                </a>
+
+                {/* SECONDARY: VRBO */}
+                <a 
+                  href="https://vrbo.com/your-property-id" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-sm transition-all"
+                >
+                  VRBO
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-10 pt-8 border-t border-gray-100 flex flex-wrap justify-center gap-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+              <span>No Service Fees</span>
+              <span>•</span>
+              <span>Best Price Guaranteed</span>
+              <span>•</span>
+              <span>Personalized Service</span>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="mt-10 pt-8 border-t border-gray-100 flex flex-wrap justify-center gap-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-        <span>No Service Fees</span>
-        <span>•</span>
-        <span>Best Price Guaranteed</span>
-        <span>•</span>
-        <span>Personalized Service</span>
-      </div>
-    </div>
-  </div>
-</section>
+      </section>
       
       <footer className="border-t border-gray-200 py-10 bg-white">
         <div className="max-w-6xl mx-auto px-4 flex justify-between items-center text-sm text-gray-500">

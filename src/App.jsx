@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 // Import the components
 import GuestLandingPage from './pages/GuestLandingPage';
 import PortalPicker from './pages/PortalPicker';
-import OwnerPortal from './pages/OwnerPortal';
+import OwnerDashboard from './pages/OwnersDashboard';
 import Login from './pages/LoginPage'; 
 import GuestLogin from './pages/GuestLoginPage';
 import GuestDashboard from './pages/GuestDashboardPage';
@@ -15,7 +15,6 @@ import Navbar from './pages/Navbar';
 const ProtectedRoute = ({ children, allowedRole }) => {
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('userRole');
-
   if (!token) {
     return <Navigate to="/login" replace />;
   }
@@ -32,7 +31,7 @@ const AppContent = () => {
   const location = useLocation();
   
   // Define all paths where the Navbar should NOT appear
-  const hideNavbarPaths = ['/guest-login', '/guest-dashboard', '/login', '/portals'];
+  const hideNavbarPaths = ['/guest-login', '/guest-dashboard', '/login', '/portals', '/owner', '/cleaner', '/maintenance'];
   
   const shouldShowNavbar = !hideNavbarPaths.includes(location.pathname);
 
@@ -54,7 +53,7 @@ const AppContent = () => {
           path="/owner" 
           element={
             <ProtectedRoute allowedRole="owner">
-              <OwnerPortal />
+              <OwnerDashboard />
             </ProtectedRoute>
           } 
         />
