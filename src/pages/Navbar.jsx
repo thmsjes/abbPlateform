@@ -53,7 +53,7 @@ const Navbar = () => {
             border: 'none', 
             boxShadow: 'none',
             outline: 'none',       // Explicitly removes the line
-            webkitAppearance: 'none',
+            WebkitAppearance: 'none',
           
         }}
   onFocus={(e) => e.target.style.outline = 'none'} // Double-check for focus
