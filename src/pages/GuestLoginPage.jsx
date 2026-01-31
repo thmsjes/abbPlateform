@@ -27,7 +27,7 @@ const GuestLogin = () => {
           <input 
             type="text" 
             placeholder="Booking Reference (e.g. HM123)"
-            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-pink-500 outline-none transition-all text-center font-bold tracking-widest uppercase"
+            className="w-full px-6 py-4 bg-gray-500 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-pink-500 outline-none transition-all text-center font-bold tracking-widest uppercase"
             onChange={(e) => setBookingRef(e.target.value)}
             required
           />

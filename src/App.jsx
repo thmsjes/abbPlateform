@@ -6,6 +6,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import GuestLandingPage from './pages/GuestLandingPage';
 import PortalPicker from './pages/PortalPicker';
 import OwnerDashboard from './pages/OwnersDashboard';
+import CleanerPortal from './pages/CleanerPortal';
+import MaintenancePortal from './pages/MaintenancePortal';
 import Login from './pages/LoginPage'; 
 import GuestLogin from './pages/GuestLoginPage';
 import GuestDashboard from './pages/GuestDashboardPage';
@@ -19,7 +21,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRole && userRole !== allowedRole) {
+  // Allow access if: no role restriction OR user has the allowed role OR user is an owner
+  if (allowedRole && userRole !== allowedRole && userRole !== 'owner') {
     return <Navigate to="/portals" replace />;
   }
 
@@ -63,7 +66,7 @@ const AppContent = () => {
           path="/cleaner" 
           element={
             <ProtectedRoute allowedRole="cleaner">
-              <div className="p-10 text-2xl font-bold text-center">Cleaner Portal Coming Soon!</div>
+              <CleanerPortal />
             </ProtectedRoute>
           } 
         />
@@ -73,7 +76,7 @@ const AppContent = () => {
           path="/maintenance" 
           element={
             <ProtectedRoute allowedRole="maintenance">
-              <div className="p-10 text-2xl font-bold text-center">Maintenance Ticket System Coming Soon!</div>
+              <MaintenancePortal />
             </ProtectedRoute>
           } 
         />

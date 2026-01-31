@@ -1,46 +1,76 @@
 import React from 'react';
-import { Wifi, BookOpen, Map, LogOut, Info } from 'lucide-react';
+import { Wifi, BookOpen, Map, LogOut, Info, ClipboardCheck, MessageSquare } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const GuestDashboard = () => {
-  return (
-    <div className="min-h-screen bg-white font-sans text-gray-900 pb-20">
-      {/* Header */}
-      <div className="bg-pink-500 p-8 rounded-b-[3rem] text-white shadow-lg">
-        <h1 className="text-3xl font-bold">Welcome Home!</h1>
-        <p className="opacity-90 mt-1">Everything you need for your stay at Sylvan.</p>
-      </div>
+  const navigate = useNavigate();
 
-      <div className="max-w-xl mx-auto px-6 -mt-6">
-        {/* Quick Action: WIFI (Most Important) */}
-        <div className="bg-white rounded-3xl p-6 shadow-xl border border-pink-50 mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-pink-100 p-3 rounded-2xl text-pink-600"><Wifi size={24}/></div>
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userRole');
+    navigate('/');
+  };
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
+      
+      {/* 1. MATCHING HEADER: Uses same height/feel as landing */}
+      <header className="relative h-[30vh] w-full bg-gray-900 overflow-hidden">
+        {/* You can replace this with a subtle image of the house to match the landing hero */}
+        <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-black/60 flex items-center justify-between px-8 md:px-20">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">Guest Dashboard</h1>
+            <p className="text-pink-200 font-medium">Your stay at Serenity on Sylvan</p>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-2 bg-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-pink-700 transition-all shadow-lg"
+          >
+            <LogOut size={20} /> Logout
+          </button>
+        </div>
+      </header>
+
+      {/* 2. MATCHING CONTAINER: max-w-6xl like landing page */}
+      <main className="max-w-6xl mx-auto px-4 -mt-10 relative z-10">
+        
+        {/* 3. WIFI CARD: Styled like the AmenityItems on your landing page */}
+        <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <div className="bg-pink-50 p-4 rounded-xl text-pink-500">
+              <Wifi size={32}/>
+            </div>
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase">WiFi Network</p>
-              <p className="font-bold text-lg leading-none">Sylvan_Oasis_Guest</p>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">High-Speed WiFi</p>
+              <p className="font-bold text-xl text-gray-800">Sylvan_Oasis_Guest</p>
             </div>
           </div>
-          <button className="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-xs font-black">COPY PW</button>
+          <button className="w-full md:w-auto bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-pink-600 transition-all active:scale-95">
+            Copy Password
+          </button>
         </div>
 
-        {/* Grid of Info */}
-        <div className="grid grid-cols-2 gap-4">
-          <InfoCard icon={<BookOpen />} title="House Manual" color="bg-blue-500" />
-          <InfoCard icon={<Map />} title="Local Guide" color="bg-green-500" />
-          <InfoCard icon={<Info />} title="Check-out Info" color="bg-orange-500" />
-          <InfoCard icon={<LogOut />} title="Need Help?" color="bg-purple-500" />
+        {/* 4. DASHBOARD GRID: Matches the 4-column layout of your gallery */}
+        <h2 className="text-xl font-bold mb-6 text-gray-800 px-2">Guest Essentials</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <DashCard icon={<BookOpen />} title="House Manual" subtitle="Rules & Instructions" />
+          <DashCard icon={<Map />} title="Local Guide" subtitle="Where to eat & explore" />
+          <DashCard icon={<ClipboardCheck />} title="Check-out Info" subtitle="Departure checklist" />
+          <DashCard icon={<MessageSquare />} title="Contact Host" subtitle="We're here to help" />
         </div>
-      </div>
+
+      </main>
     </div>
   );
 };
 
-const InfoCard = ({ icon, title, color }) => (
-  <div className="bg-gray-50 p-6 rounded-[2rem] hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-100 cursor-pointer text-center">
-    <div className={`w-12 h-12 ${color} text-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg`}>
+// Internal component matching the "AmenityItem" feel but with more depth
+const DashCard = ({ icon, title, subtitle }) => (
+  <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-pink-200 transition-all cursor-pointer group text-center md:text-left">
+    <div className="text-pink-500 mb-4 flex justify-center md:justify-start group-hover:scale-110 transition-transform">
       {icon}
     </div>
-    <span className="font-bold text-sm text-gray-700">{title}</span>
+    <h3 className="font-bold text-lg text-gray-900 mb-1">{title}</h3>
+    <p className="text-xs text-gray-400 font-medium">{subtitle}</p>
   </div>
 );
 
