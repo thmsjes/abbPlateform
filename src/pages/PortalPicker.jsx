@@ -15,7 +15,7 @@ const PortalPicker = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           
           {/* OWNER CARD */}
-          <Link to="/login" className="group bg-white p-8 rounded-3xl shadow-sm border-2 border-transparent hover:border-blue-500 transition-all text-left block">
+          <Link to="/login?portal=owner" className="group bg-white p-8 rounded-3xl shadow-sm border-2 border-transparent hover:border-blue-500 transition-all text-left block">
             <div className="bg-blue-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-blue-600 group-hover:scale-110 transition-transform">
               <ShieldCheck size={32} />
             </div>
@@ -27,7 +27,7 @@ const PortalPicker = () => {
           </Link>
 
           {/* CLEANER CARD */}
-          <Link to="/login" className="group bg-white p-8 rounded-3xl shadow-sm border-2 border-transparent hover:border-green-500 transition-all text-left block">
+          <Link to="/login?portal=cleaner" className="group bg-white p-8 rounded-3xl shadow-sm border-2 border-transparent hover:border-green-500 transition-all text-left block">
             <div className="bg-green-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-green-600 group-hover:scale-110 transition-transform">
               <Brush size={32} />
             </div>
@@ -39,7 +39,7 @@ const PortalPicker = () => {
           </Link>
 
           {/* MAINTENANCE CARD (NEW) */}
-          <Link to="/login" className="group bg-white p-8 rounded-3xl shadow-sm border-2 border-transparent hover:border-orange-500 transition-all text-left block">
+          <Link to="/login?portal=maintenance" className="group bg-white p-8 rounded-3xl shadow-sm border-2 border-transparent hover:border-orange-500 transition-all text-left block">
             <div className="bg-orange-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-orange-600 group-hover:scale-110 transition-transform">
               <Wrench size={32} />
             </div>

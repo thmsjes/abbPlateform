@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -36,6 +37,14 @@ h1 {
   line-height: 1.1;
 }
 
+button, a, button:focus, a:focus, button:hover, a:hover {
+    outline: none !important;
+    outline-color: transparent !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -43,13 +52,46 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
 }
+
+/* Light button overrides */
+button.btn-light-gray {
+  background-color: #f3f4f6 !important;
+  color: #374151 !important;
+}
+
+button.btn-light-blue {
+  background-color: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+button.btn-light-red {
+  background-color: #fee2e2 !important;
+  color: #dc2626 !important;
+}
+
+button.btn-blue-primary {
+  background-color: #2563eb !important;
+  color: white !important;
+}
+
 button:hover {
   border-color: #646cff;
 }
+
+button.unpaid-button {
+  border-radius: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.25s;
+}
+
+button.unpaid-button:hover {
+  opacity: 0.9;
+}
+
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
@@ -63,11 +105,25 @@ button:focus-visible {
   a:hover {
     color: #747bff;
   }
-  button {
-    background-color: #f9f9f9;
+  
+  /* Light button overrides for light color scheme */
+  button.btn-light-gray {
+    background-color: #f3f4f6 !important;
+    color: #374151 !important;
+  }
+
+  button.btn-light-blue {
+    background-color: #dbeafe !important;
+    color: #1d4ed8 !important;
+  }
+
+  button.btn-light-red {
+    background-color: #fee2e2 !important;
+    color: #dc2626 !important;
+  }
+
+  button.btn-blue-primary {
+    background-color: #2563eb !important;
+    color: white !important;
   }
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
