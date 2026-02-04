@@ -32,16 +32,42 @@ const Login = () => {
       
       // Handle different response structures
       const token = data.token || data.data?.token || data.accessToken;
+      const propertyId = data.propertyId || data.PropertyId || data.data?.propertyId || data.data?.PropertyId;
+      const propertyIds = data.propertyIds || data.PropertyIds || data.data?.propertyIds || data.data?.PropertyIds;
       
       if (data.isSuccess && token) {
         // 3. Store the real JWT and user data from the backend
         localStorage.setItem('token', token);
+        
+        // Store property IDs - handle both single and multiple
+        let idsToStore = [];
+        if (propertyIds && Array.isArray(propertyIds)) {
+          idsToStore = propertyIds;
+          localStorage.setItem('propertyIds', JSON.stringify(propertyIds));
+          console.log('PropertyIds saved:', propertyIds);
+        } else if (propertyId) {
+          idsToStore = [propertyId];
+          localStorage.setItem('propertyIds', JSON.stringify([propertyId]));
+          localStorage.setItem('propertyId', propertyId);
+          console.log('PropertyId saved:', propertyId);
+        } else {
+          console.warn('No propertyId or propertyIds found in login response');
+          console.log('Full login response:', data);
+        }
       
         // 4. Decode the JWT to get the user's access level
         try {
           const decoded = jwtDecode(token);
           console.log('Decoded token:', decoded);
           console.log('Intended portal:', intendedPortal);
+          
+          // Extract PropertyId from token
+          const propertyIdFromToken = decoded["PropertyId"] || decoded["propertyId"];
+          if (propertyIdFromToken) {
+            localStorage.setItem('propertyIds', JSON.stringify([propertyIdFromToken]));
+            localStorage.setItem('propertyId', propertyIdFromToken);
+            console.log('PropertyId extracted from token:', propertyIdFromToken);
+          }
           
           // Try different possible keys for access level
           const accessLevel = decoded["AccessLevel"] || decoded["accessLevel"] || decoded["role"] || decoded["Role"]; 

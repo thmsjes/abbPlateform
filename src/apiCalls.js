@@ -213,6 +213,48 @@ export const getAllEventsByProperty = async ({token, propertyId}) => {
     throw error;
   }
 };
+
+export const createEvent = async ({token, eventData}) => {
+  try {
+    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/createNewEvent`, eventData, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error creating event:", error);
+    throw error;
+  }
+};
+
+export const updateEvent = async ({token, eventData}) => {
+  try {
+    const response = await axios.put(`${import.meta.env.VITE_API_URL_BASE}/api/UpdateEvent`, eventData, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error updating event:", error);
+    throw error;
+  }
+};
+
+export const deleteEvent = async ({token, eventId}) => {
+  try {
+    const response = await axios.delete(`${import.meta.env.VITE_API_URL_BASE}/api/deleteEvent/${eventId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting event:", error);
+    throw error;
+  }
+};
 export const updateInvoice = async ({token, invoiceId, invoiceData}) => {
   try {
     const response = await axios.put(`${import.meta.env.VITE_API_URL_BASE}/api/UpdateInvoice?invoiceId=${invoiceId}`, invoiceData, {
@@ -229,7 +271,10 @@ export const updateInvoice = async ({token, invoiceId, invoiceData}) => {
 
 export const deleteInvoice = async ({token, invoiceId}) => {
   try {
-    const response = await axios.delete(`${import.meta.env.VITE_API_URL_BASE}/api/DeleteInvoiceByInvoiceId?invoiceId=${invoiceId}`, {
+    console.log('deleteInvoice function received invoiceId:', invoiceId, 'Type:', typeof invoiceId);
+    const url = `${import.meta.env.VITE_API_URL_BASE}/api/DeleteInvoiceByInvoiceId?invoiceId=${invoiceId}`;
+    console.log('Full URL:', url);
+    const response = await axios.delete(url, {
       headers: {
         Authorization: `Bearer ${token}`
       }

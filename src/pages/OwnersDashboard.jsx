@@ -20,11 +20,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Wrench,
-  Sparkles
+  Sparkles,
+  AlertCircle,
+  Wind,
+  Hammer
 } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
 import Transactions from '../components/Transactions';
-import { getExpenses, getPropertyById, createReservation, updateReservation, deleteReservation, getUsersByPropertyId, getAllReservationsByPropertyId, getAllEventsByProperty, createNewInvoice, getInvoicesByProperty, getNotPaidInvoicesByProperty, updateInvoice, deleteInvoice, createExpense } from '../apiCalls';
+import { getExpenses, getPropertyById, createReservation, updateReservation, deleteReservation, getUsersByPropertyId, getAllReservationsByPropertyId, getAllEventsByProperty, createNewInvoice, getInvoicesByProperty, getNotPaidInvoicesByProperty, updateInvoice, deleteInvoice, createExpense, createEvent, updateEvent, deleteEvent } from '../apiCalls';
 
 const OwnerDashboard = () => {
   const navigate = useNavigate();
@@ -47,6 +50,9 @@ const OwnerDashboard = () => {
   const [editingReservation, setEditingReservation] = useState(null);
   const [datePickerKey, setDatePickerKey] = useState(0);
   const [cleanersList, setCleanersList] = useState([]);
+  const [reservationErrors, setReservationErrors] = useState({});
+  const [showReservationDetailsModal, setShowReservationDetailsModal] = useState(false);
+  const [selectedReservationDetails, setSelectedReservationDetails] = useState(null);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [staffForm, setStaffForm] = useState({
     username: '',
@@ -91,7 +97,9 @@ const OwnerDashboard = () => {
     checkoutDate: '',
     lockCode: '',
     staffId: '',
-    cleaningDateTime: ''
+    cleaningDateTime: '',
+    numberOfGuests: '',
+    hasDogs: false
   });
   
   // Mock data for Staff
@@ -135,19 +143,51 @@ const OwnerDashboard = () => {
     completed: false
   });
 
-  // NEW: Mock data for Reservations
-  const [reservationsList, setReservationsList] = useState([
-    { id: 1, guest: 'Sarah Connor', property: 'Sunset Suite', checkIn: '2026-01-20', checkOut: '2026-01-25', status: 'Confirmed' },
-    { id: 2, guest: 'James Bond', property: 'Skyline Loft', checkIn: '2026-02-01', checkOut: '2026-02-05', status: 'Pending' },
-  ]);
+  // State for Reservations - populated from API
+  const [reservationsList, setReservationsList] = useState([]);
+  
+  // State for reservation month filter
+  const [reservationFilterMonth, setReservationFilterMonth] = useState(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'));
+  
+  // State for guest details modal
+  const [selectedGuest, setSelectedGuest] = useState(null);
+  const [showGuestDetailsModal, setShowGuestDetailsModal] = useState(false);
+  
+  // State for reservation details modal
+  const [selectedReservation, setSelectedReservation] = useState(null);
+  
+  // State for event details modal
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
+  
+  // State to store user map for guest lookup
+  const [propertyUserMap, setPropertyUserMap] = useState({});
 
   // NEW: State for events
   const [eventsList, setEventsList] = useState([]);
+
+  // State for notifications/toasts
+  const [notification, setNotification] = useState(null);
+  
+  const showNotification = (message, type = 'success', duration = 3000) => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), duration);
+  };
+
+  // State for confirmation dialog
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  
+  const showConfirmation = (title, message, onConfirm, onCancel) => {
+    setConfirmDialog({ title, message, onConfirm, onCancel });
+  };
 
   // State for invoices
   const [invoicesList, setInvoicesList] = useState([]);
   const [unpaidInvoicesList, setUnpaidInvoicesList] = useState([]);
   const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
+  
+  // Map to track which event ID is associated with which invoice ID
+  const [invoiceEventMap, setInvoiceEventMap] = useState({});
   
   // State for staff details modal from invoices
   const [selectedStaffForDetails, setSelectedStaffForDetails] = useState(null);
@@ -177,13 +217,40 @@ const OwnerDashboard = () => {
     howPaid: 'Credit Card'
   });
 
-  // Mock data for Dashboard Stats
-  const stats = [
-    { label: 'Total Revenue', value: '$12,450', icon: DollarSign, color: 'text-green-600', bg: 'bg-green-100' },
-    { label: 'Active Bookings', value: reservationsList.length.toString(), icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100' },
-    { label: 'Avg. Occupancy', value: '82%', icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-100' },
-    { label: 'Staff Active', value: staffList.length.toString(), icon: Users, color: 'text-orange-600', bg: 'bg-orange-100' },
-  ];
+  // Calculate dashboard stats dynamically
+  const calculateStats = () => {
+    const currentYear = new Date().getFullYear();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Total Revenue: sum of all positive expenses for current year
+    const totalRevenue = expensesData
+      .filter(expense => {
+        const expenseYear = expense.dateCreated ? new Date(expense.dateCreated).getFullYear() : currentYear;
+        const amount = parseFloat(expense.amount) || 0;
+        return expenseYear === currentYear && amount > 0;
+      })
+      .reduce((sum, expense) => sum + (parseFloat(expense.amount) || 0), 0);
+    
+    // Active Reservations: reservations with checkOut date in the future
+    const activeReservations = reservationsList.filter(res => 
+      res.checkOut && res.checkOut >= today
+    ).length;
+    
+    // Staff Active: total staff count
+    const activeStaff = staffList.length;
+    
+    // Unpaid Invoices: count of unpaid invoices
+    const unpaidCount = unpaidInvoicesList.length;
+    
+    return [
+      { label: 'Total Revenue', value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign, color: 'text-green-600', bg: 'bg-green-100' },
+      { label: 'Active Reservations', value: activeReservations.toString(), icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100' },
+      { label: 'Active Staff', value: activeStaff.toString(), icon: Users, color: 'text-orange-600', bg: 'bg-orange-100' },
+      { label: 'Unpaid Invoices', value: unpaidCount.toString(), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100' },
+    ];
+  };
+
+  const stats = calculateStats();
 
   const deleteStaff = async (userId) => {
     if (!window.confirm('Are you sure you want to delete this staff member?')) {
@@ -428,14 +495,14 @@ const OwnerDashboard = () => {
   const openEditReservationModal = (reservation) => {
     setEditingReservation(reservation);
     setReservationForm({
-      confirmationNumber: reservation.confirmationNumber || '',
-      customerId: reservation.customerId || '',
+      confirmationNumber: reservation.confirmationNumber?.toString() || '',
+      customerId: reservation.customerId?.toString() || '',
       propertyId: reservation.propertyId || selectedPropertyId || '',
       checkInDate: reservation.checkIn || '',
       checkoutDate: reservation.checkOut || '',
-      lockCode: reservation.lockCode || '',
+      lockCode: reservation.lockCode?.toString() || '',
       staffId: reservation.staffId || '',
-      cleaningDateTime: reservation.cleaningDateTime || ''
+      cleaningDateTime: reservation.cleaningDateTime || null
     });
     setDatePickerKey(prev => prev + 1);
     setShowReservationModal(true);
@@ -444,9 +511,27 @@ const OwnerDashboard = () => {
   const closeReservationModal = () => {
     setShowReservationModal(false);
     setEditingReservation(null);
+    setReservationErrors({});
   };
 
   const handleSaveReservation = async () => {
+    // Validate required fields
+    const errors = {};
+    if (!reservationForm.confirmationNumber?.toString?.()?.trim()) errors.confirmationNumber = true;
+    if (!reservationForm.customerId?.toString?.()?.trim()) errors.customerId = true;
+    if (!reservationForm.checkInDate) errors.checkInDate = true;
+    if (!reservationForm.checkoutDate) errors.checkoutDate = true;
+    if (!reservationForm.lockCode?.toString?.()?.trim()) errors.lockCode = true;
+    if (!reservationForm.staffId) errors.staffId = true;
+
+    setReservationErrors(errors);
+
+    // If there are validation errors, don't proceed
+    if (Object.keys(errors).length > 0) {
+      showNotification('Please fill in all required fields', 'error');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
       
@@ -461,9 +546,16 @@ const OwnerDashboard = () => {
           checkoutDate: reservationForm.checkoutDate,
           lockCode: reservationForm.lockCode,
           staffId: reservationForm.staffId,
-          cleaningDateTime: reservationForm.cleaningDateTime
+          cleaningDateTime: reservationForm.cleaningDateTime|| null,
+          guestCount: reservationForm.numberOfGuests,
+          dogs: reservationForm.hasDogs
         };
-        await updateReservation({ token, reservationData: updateData });
+        const response = await updateReservation({ token, reservationData: updateData });
+        
+        if (response && !response.isSuccess) {
+          showNotification('Failed to update reservation: ' + (response.message || 'Unknown error'), 'error');
+          return;
+        }
         
         setReservationsList(reservationsList.map(r => 
           r.id === editingReservation.id 
@@ -475,10 +567,12 @@ const OwnerDashboard = () => {
                 checkOut: reservationForm.checkoutDate,
                 lockCode: reservationForm.lockCode,
                 staffId: reservationForm.staffId,
-                cleaningDateTime: reservationForm.cleaningDateTime
+                cleaningDateTime: reservationForm.cleaningDateTime||null
               }
             : r
         ));
+        
+        showNotification('Reservation updated successfully', 'success');
       } else {
         // Create new reservation
         const createData = {
@@ -489,12 +583,19 @@ const OwnerDashboard = () => {
           checkoutDate: reservationForm.checkoutDate,
           lockCode: reservationForm.lockCode,
           staffId: reservationForm.staffId,
-          cleaningDateTime: reservationForm.cleaningDateTime
+          cleaningDateTime: null,
+          guestCount: reservationForm.numberOfGuests,
+          dogs: reservationForm.hasDogs
         };
         const response = await createReservation({ token, reservationData: createData });
         
+        if (response && !response.isSuccess) {
+          showNotification('Failed to create reservation: ' + (response.message || 'Unknown error'), 'error');
+          return;
+        }
+        
         setReservationsList([...reservationsList, {
-          id: response.id || Math.max(...reservationsList.map(r => r.id), 0) + 1,
+          id: response?.id || Math.max(...reservationsList.map(r => r.id), 0) + 1,
           guest: reservationForm.customerId,
           property: selectedPropertyDetails?.propertyName || 'Property',
           checkIn: reservationForm.checkInDate,
@@ -503,29 +604,56 @@ const OwnerDashboard = () => {
           customerId: reservationForm.customerId,
           lockCode: reservationForm.lockCode,
           staffId: reservationForm.staffId,
-          cleaningDateTime: reservationForm.cleaningDateTime,
-          status: 'Pending'
+          cleaningDateTime: reservationForm.cleaningDateTime || null,
+          status: 'Pending',
+          propertyId: selectedPropertyId
         }]);
+        
+        // Create a cleaning calendar event if cleaningDateTime is provided
+        if (reservationForm.cleaningDateTime) {
+          const cleaningDate = reservationForm.cleaningDateTime.split('T')[0];
+          await createInvoiceEvent(
+            token,
+            'Cleaning',
+            reservationForm.cleaningDateTime,
+            reservationForm.cleaningDateTime,
+            `Cleaning for reservation: ${reservationForm.customerId}`,
+            selectedPropertyId
+          );
+        }
+        
+        showNotification('Reservation created successfully', 'success');
       }
       
       closeReservationModal();
     } catch (error) {
       console.error('Error saving reservation:', error);
-      alert('Error saving reservation');
+      showNotification('Error saving reservation: ' + (error.message || 'Unknown error'), 'error');
     }
   };
 
   const handleDeleteReservation = async (id) => {
-    if(window.confirm("Are you sure you want to cancel this reservation?")) {
-      try {
-        const token = localStorage.getItem('token');
-        await deleteReservation({ token, reservationId: id });
-        setReservationsList(reservationsList.filter(r => r.id !== id));
-      } catch (error) {
-        console.error('Error deleting reservation:', error);
-        alert('Error deleting reservation');
+    showConfirmation(
+      'Cancel Reservation',
+      'Are you sure you want to cancel this reservation? This action cannot be undone.',
+      async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await deleteReservation({ token, reservationId: id });
+          
+          if (response.isSuccess === false) {
+            showNotification('Failed to delete reservation: ' + response.message, 'error');
+            return;
+          }
+          
+          setReservationsList(reservationsList.filter(r => r.id !== id));
+          showNotification('Reservation cancelled successfully', 'success');
+        } catch (error) {
+          console.error('Error deleting reservation:', error);
+          showNotification('Failed to cancel reservation', 'error');
+        }
       }
-    }
+    );
   };
 
   const handleLogout = () => {
@@ -537,8 +665,8 @@ const OwnerDashboard = () => {
   // Function to get first and last day of current month
   const getMonthDateRange = () => {
     const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     return { firstDay, lastDay };
   };
 
@@ -548,6 +676,7 @@ const OwnerDashboard = () => {
     const propId = property.id || property.propertyId;
     setSelectedPropertyId(propId);
     setSelectedPropertyDetails(property);
+    setActiveView('dashboard');
     // Store propertyId in localStorage for child components/portals
     localStorage.setItem('propertyId', propId);
   };
@@ -589,6 +718,110 @@ const OwnerDashboard = () => {
       };
 
       fetchExpenses();
+    }
+  }, [activeView, selectedPropertyId]);
+
+  // Fetch dashboard data when selectedPropertyId changes or activeView is dashboard
+  useEffect(() => {
+    if ((activeView === 'dashboard' || activeView === 'properties') && selectedPropertyId) {
+      const fetchDashboardData = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) return;
+
+          // Fetch invoices
+          const invoicesData = await getInvoicesByProperty({ token, propertyId: selectedPropertyId });
+          setInvoicesList(invoicesData || []);
+
+          // Fetch unpaid invoices
+          const unpaidData = await getNotPaidInvoicesByProperty({ token, propertyId: selectedPropertyId });
+          setUnpaidInvoicesList(unpaidData || []);
+
+          // Fetch all users for this property to match with guest customerId
+          const allUsersData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
+          const userMap = {};
+          if (allUsersData && Array.isArray(allUsersData)) {
+            allUsersData.forEach(user => {
+              userMap[user.id] = user;
+            });
+          }
+
+          // Fetch reservations
+          const reservationsData = await getAllReservationsByPropertyId({ token, propertyId: selectedPropertyId });
+          if (reservationsData && Array.isArray(reservationsData)) {
+            // Map API response to expected format
+            const mappedReservations = reservationsData.map(res => {
+              // Extract just the date portion (YYYY-MM-DD) ignoring time and timezone
+              const checkInDate = res.checkInDate ? res.checkInDate.split('T')[0] : '';
+              const checkOutDate = res.checkoutDate ? res.checkoutDate.split('T')[0] : '';
+              
+              // Get guest info from user map using customerId
+              const guestUser = userMap[res.customerId];
+              const guestName = guestUser 
+                ? `${guestUser.firstName || ''} ${guestUser.lastName || ''}`.trim()
+                : res.guestName || res.customerId;
+              
+              return {
+                id: res.id,
+                confirmationNumber: res.confirmationNumber,
+                customerId: res.customerId,
+                guest: guestName,
+                guestUser: guestUser,
+                property: selectedPropertyDetails?.propertyName,
+                checkIn: checkInDate,
+                checkOut: checkOutDate,
+                lockCode: res.lockCode,
+                staffId: res.staffId,
+                numberOfGuests: res.guestCount,
+                hasDogs: res.dogs
+              };
+            });
+            setReservationsList(mappedReservations);
+            setPropertyUserMap(userMap);
+            console.log('Final mapped reservations with guestUser:', mappedReservations);
+          }
+
+          // Fetch staff (filter out guests - access codes 1 and 4)
+          const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
+          if (staffData && Array.isArray(staffData)) {
+            const mappedStaff = staffData
+              .filter(user => {
+                const access = parseInt(user.access);
+                return access !== 1 && access !== 4;
+              })
+              .map(user => ({
+                id: user.id,
+                username: user.username || '',
+                name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown',
+                email: user.email || '',
+                company: user.company || '',
+                phoneNumber: user.phoneNumber || '',
+                address: user.address || '',
+                city: user.city || '',
+                state: user.state || '',
+                zip: user.zip || '',
+                notes: user.notes || '',
+                access: user.access || 0,
+                cleaner: parseInt(user.access) === 2 || parseInt(user.access) === 5,
+                maintenance: parseInt(user.access) === 3 || parseInt(user.access) === 6
+              }));
+            setStaffList(mappedStaff);
+          }
+
+          // Fetch expenses
+          const { firstDay, lastDay } = getMonthDateRange();
+          const expensesAttributes = {
+            propertyId: selectedPropertyId,
+            dateFrom: firstDay.toISOString().split('T')[0],
+            dateTo: lastDay.toISOString().split('T')[0]
+          };
+          const expensesData = await getExpenses({ token, attributes: expensesAttributes });
+          setExpensesData(expensesData || []);
+        } catch (error) {
+          console.error('Error fetching dashboard data:', error);
+        }
+      };
+      fetchDashboardData();
     }
   }, [activeView, selectedPropertyId]);
 
@@ -691,40 +924,104 @@ const OwnerDashboard = () => {
         try {
           const token = localStorage.getItem('token');
           
+          // Fetch all users for this property to match with guest customerId
+          const allUsersData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
+          console.log('All users data:', allUsersData);
+          const userMap = {};
+          if (allUsersData && Array.isArray(allUsersData)) {
+            allUsersData.forEach(user => {
+              userMap[user.id] = user;
+            });
+          }
+          console.log('User map:', userMap);
+          
           // Fetch reservations
-          const reservations = await getAllReservationsByPropertyId({ token, propertyId: selectedPropertyId });
-          if (reservations && Array.isArray(reservations)) {
+          const reservationResponse = await getAllReservationsByPropertyId({ token, propertyId: selectedPropertyId });
+          console.log('Reservation API Response:', reservationResponse);
+          
+          let reservationsArray = [];
+          if (reservationResponse) {
+            // Handle wrapped response format: { isSuccess, reservations: [...] }
+            if (reservationResponse.reservations && Array.isArray(reservationResponse.reservations)) {
+              reservationsArray = reservationResponse.reservations;
+            } else if (Array.isArray(reservationResponse)) {
+              // Handle direct array response
+              reservationsArray = reservationResponse;
+            }
+          }
+          
+          console.log('Extracted reservations array:', reservationsArray);
+          
+          if (reservationsArray.length > 0) {
             // Map API response to expected format
-            const mappedReservations = reservations.map(res => {
+            const mappedReservations = reservationsArray.map(res => {
               // Extract just the date portion (YYYY-MM-DD) ignoring time and timezone
               const checkInDate = res.checkInDate ? res.checkInDate.split('T')[0] : '';
               const checkOutDate = res.checkoutDate ? res.checkoutDate.split('T')[0] : '';
+              
+              // Get guest info from user map using customerId
+              const guestUser = userMap[res.customerId];
+              console.log(`Looking for customerId ${res.customerId}, found:`, guestUser);
+              const guestName = guestUser 
+                ? `${guestUser.firstName || ''} ${guestUser.lastName || ''}`.trim()
+                : res.guestName || res.customerId;
               
               return {
                 id: res.id,
                 confirmationNumber: res.confirmationNumber,
                 customerId: res.customerId,
-                guest: res.guestName || res.customerId,
+                guest: guestName,
                 property: selectedPropertyDetails?.propertyName,
                 checkIn: checkInDate,
                 checkOut: checkOutDate,
                 lockCode: res.lockCode,
                 staffId: res.staffId,
-                status: res.status || 'Pending'
+                propertyId: res.propertyId,
+                numberOfGuests: res.guestCount,
+                hasDogs: res.dogs
               };
             });
+            console.log('Mapped reservations:', mappedReservations);
             setReservationsList(mappedReservations);
+            setPropertyUserMap(userMap);
+          } else {
+            console.log('No reservations found');
+            setReservationsList([]);
           }
           
           // Fetch events
           const events = await getAllEventsByProperty({ token, propertyId: selectedPropertyId });
-          if (events && Array.isArray(events)) {
-            // Normalize event dates to YYYY-MM-DD format
-            const normalizedEvents = events.map(event => ({
-              ...event,
-              eventDate: event.eventDate ? event.eventDate.split('T')[0] : event.eventDate
+          console.log('Fetched events from API:', events);
+          
+          // Handle wrapped response format or direct array
+          let eventsArray = [];
+          if (events) {
+            if (events.events && Array.isArray(events.events)) {
+              eventsArray = events.events;
+            } else if (Array.isArray(events)) {
+              eventsArray = events;
+            }
+          }
+          
+          if (eventsArray.length > 0) {
+            // Normalize event data: map API fields to our format
+            const normalizedEvents = eventsArray.map(event => ({
+              id: event.id,
+              eventName: event.event || event.eventName || 'Unknown Event',
+              eventDate: event.startDate ? event.startDate.split('T')[0] : (event.eventDate ? event.eventDate.split('T')[0] : ''),
+              description: event.description || '',
+              type: event.event || '',
+              completed: event.completed,
+              startDate: event.startDate,
+              endDate: event.endDate,
+              userId: event.userId,
+              propertyId: event.propertyId
             }));
+            console.log('Normalized events:', normalizedEvents);
             setEventsList(normalizedEvents);
+          } else {
+            console.log('No events found in API response');
+            setEventsList([]);
           }
 
           // Fetch staff by property
@@ -863,6 +1160,20 @@ const OwnerDashboard = () => {
       
       await updateInvoice({ token, invoiceId: invoiceId, invoiceData });
       
+      // Update corresponding calendar event if it exists
+      const eventId = invoiceEventMap[invoiceId];
+      if (eventId) {
+        await updateInvoiceEvent(
+          token,
+          eventId,
+          editInvoiceForm.type,
+          editInvoiceForm.issueCreatedDate + 'T00:00:00.000Z',
+          editInvoiceForm.addressDate + 'T23:59:59.999Z',
+          editInvoiceForm.description,
+          selectedPropertyId
+        );
+      }
+      
       // Refresh invoice lists
       if (selectedPropertyId) {
         const allInvoices = await getInvoicesByProperty({ token, propertyId: selectedPropertyId });
@@ -870,10 +1181,21 @@ const OwnerDashboard = () => {
         
         const unpaidInvoices = await getNotPaidInvoicesByProperty({ token, propertyId: selectedPropertyId });
         setUnpaidInvoicesList(unpaidInvoices || []);
+        
+        // Refresh events to show updated calendar
+        const eventResponse = await getAllEventsByProperty({ token, propertyId: selectedPropertyId });
+        if (eventResponse.isSuccess && eventResponse.events) {
+          const normalizedEvents = eventResponse.events.map(ev => ({
+            ...ev,
+            eventName: ev.event,
+            eventDate: ev.startDate
+          }));
+          setEventsList(normalizedEvents);
+        }
       }
       
       setShowEditInvoiceModal(false);
-      alert('Invoice updated successfully');
+      showNotification('Invoice updated successfully', 'success');
     } catch (error) {
       console.error('Error updating invoice:', error);
       alert('Failed to update invoice');
@@ -882,25 +1204,120 @@ const OwnerDashboard = () => {
 
   // Handle delete invoice
   const handleDeleteInvoice = async (invoiceId) => {
-    if (window.confirm('Are you sure you want to delete this invoice?')) {
-      try {
-        const token = localStorage.getItem('token');
-        await deleteInvoice({ token, invoiceId });
-        
-        // Refresh invoice lists
-        if (selectedPropertyId) {
-          const allInvoices = await getInvoicesByProperty({ token, propertyId: selectedPropertyId });
-          setInvoicesList(allInvoices || []);
+    showConfirmation(
+      'Delete Invoice',
+      'Are you sure you want to delete this invoice? This action cannot be undone.',
+      async () => {
+        try {
+          const token = localStorage.getItem('token');
+          console.log('Deleting invoice with ID:', invoiceId, 'Type:', typeof invoiceId);
+          const deleteResponse = await deleteInvoice({ token, invoiceId });
+          console.log('Delete response:', deleteResponse);
           
-          const unpaidInvoices = await getNotPaidInvoicesByProperty({ token, propertyId: selectedPropertyId });
-          setUnpaidInvoicesList(unpaidInvoices || []);
+          // Check if delete was successful
+          if (deleteResponse.isSuccess === false) {
+            showNotification('Failed to delete invoice: ' + deleteResponse.message, 'error');
+            return;
+          }
+          
+          // Delete corresponding calendar event if it exists
+          const eventId = invoiceEventMap[invoiceId];
+          if (eventId) {
+            await deleteInvoiceEvent(token, eventId);
+            // Remove from map
+            const updatedMap = { ...invoiceEventMap };
+            delete updatedMap[invoiceId];
+            setInvoiceEventMap(updatedMap);
+          }
+          
+          // Refresh invoice lists
+          if (selectedPropertyId) {
+            console.log('Refreshing invoice lists for property:', selectedPropertyId);
+            const allInvoices = await getInvoicesByProperty({ token, propertyId: selectedPropertyId });
+            console.log('Updated all invoices:', allInvoices);
+            setInvoicesList(allInvoices || []);
+            
+            const unpaidInvoices = await getNotPaidInvoicesByProperty({ token, propertyId: selectedPropertyId });
+            console.log('Updated unpaid invoices:', unpaidInvoices);
+            setUnpaidInvoicesList(unpaidInvoices || []);
+            
+            // Refresh events to show calendar updated
+            const eventResponse = await getAllEventsByProperty({ token, propertyId: selectedPropertyId });
+            if (eventResponse.isSuccess && eventResponse.events) {
+              const normalizedEvents = eventResponse.events.map(ev => ({
+                ...ev,
+                eventName: ev.event,
+                eventDate: ev.startDate
+              }));
+              setEventsList(normalizedEvents);
+            }
+          }
+          
+          showNotification('Invoice deleted successfully', 'success');
+        } catch (error) {
+          console.error('Error deleting invoice:', error);
+          showNotification('Failed to delete invoice: ' + (error.message || 'Unknown error'), 'error');
         }
-        
-        alert('Invoice deleted successfully');
-      } catch (error) {
-        console.error('Error deleting invoice:', error);
-        alert('Failed to delete invoice');
       }
+    );
+  };
+
+  // Helper function to create a calendar event when an invoice is created
+  const createInvoiceEvent = async (token, invoiceType, startDate, endDate, description, propertyId) => {
+    try {
+      const eventData = {
+        event: invoiceType, // "Cleaning", "Maintenance", or "Repair"
+        startDate: startDate,
+        endDate: endDate,
+        propertyId: propertyId,
+        description: description,
+        userId: parseInt(localStorage.getItem('userId') || '0'),
+        completed: false
+      };
+      
+      const response = await createEvent({ token, eventData });
+      console.log('Calendar event created successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error creating calendar event:', error);
+      // Don't throw - we want the invoice to be created even if event creation fails
+      return null;
+    }
+  };
+
+  // Helper function to update a calendar event when an invoice is updated
+  const updateInvoiceEvent = async (token, eventId, invoiceType, startDate, endDate, description, propertyId) => {
+    try {
+      const eventData = {
+        id: eventId,
+        event: invoiceType,
+        startDate: startDate,
+        endDate: endDate,
+        propertyId: propertyId,
+        description: description,
+        userId: parseInt(localStorage.getItem('userId') || '0'),
+        completed: false,
+        dateTimeInserted: new Date().toISOString()
+      };
+      
+      const response = await updateEvent({ token, eventData });
+      console.log('Calendar event updated successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error updating calendar event:', error);
+      return null;
+    }
+  };
+
+  // Helper function to delete a calendar event when an invoice is deleted
+  const deleteInvoiceEvent = async (token, eventId) => {
+    try {
+      const response = await deleteEvent({ token, eventId });
+      console.log('Calendar event deleted successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error deleting calendar event:', error);
+      return null;
     }
   };
 
@@ -995,6 +1412,65 @@ const OwnerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-[100] p-4 rounded-lg shadow-lg animate-in fade-in slide-in-from-top-2 duration-300 flex items-center gap-3 ${
+          notification.type === 'success' 
+            ? 'bg-green-100 border border-green-300 text-green-800' 
+            : 'bg-red-100 border border-red-300 text-red-800'
+        }`}>
+          {notification.type === 'success' ? (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          )}
+          <span className="font-medium">{notification.message}</span>
+        </div>
+      )}
+      
+      {/* Confirmation Dialog Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 animate-in zoom-in-95 duration-300 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 rounded-t-2xl">
+              <h3 className="text-lg font-bold text-white">{confirmDialog.title}</h3>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-gray-600 mb-6">{confirmDialog.message}</p>
+              
+              {/* Buttons */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    confirmDialog.onCancel?.();
+                    setConfirmDialog(null);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    confirmDialog.onConfirm?.();
+                    setConfirmDialog(null);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {showAddStaffModal && portalRootRef.current && createPortal(
         <div onClick={(e) => {if (e.target === e.currentTarget) {resetStaffForm(); setShowAddStaffModal(false);}}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto">
           <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full mx-4 my-8 overflow-hidden">
@@ -1380,11 +1856,11 @@ const OwnerDashboard = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* LEFT SIDE - RESERVATIONS */}
                 <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-                  <h3 className="text-xl font-bold mb-6">Current Reservations</h3>
+                  <h3 className="text-xl font-bold mb-6 text-gray-900">Current Reservations</h3>
                   {reservationsList.length > 0 ? (
                     <div className="space-y-4">
                       {reservationsList.map(res => (
-                        <div key={res.id} className="p-4 border border-blue-200 rounded-2xl bg-blue-50 hover:shadow-md transition-all">
+                        <div key={res.id} className="p-4 border border-blue-200 rounded-2xl bg-blue-50 hover:shadow-md transition-all cursor-pointer" onClick={() => {setSelectedReservation(res); setShowReservationDetailsModal(true);}}>
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
                               <p className="font-bold text-gray-900">{res.guest}</p>
@@ -1392,9 +1868,6 @@ const OwnerDashboard = () => {
                                 {new Date(res.checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(res.checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </p>
                             </div>
-                            <span className={`px-3 py-1 text-xs font-bold rounded-md ${res.status === 'Confirmed' ? 'text-green-600 bg-green-100' : 'text-orange-600 bg-orange-100'}`}>
-                              {res.status}
-                            </span>
                           </div>
                         </div>
                       ))}
@@ -1404,32 +1877,37 @@ const OwnerDashboard = () => {
                   )}
                 </div>
 
-                {/* RIGHT SIDE - EVENTS & ALERTS */}
+                {/* RIGHT SIDE - EVENTS */}
                 <div className="space-y-6">
-                  {eventsList.length > 0 && (
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-                      <h3 className="text-xl font-bold mb-6">Events</h3>
-                      <div className="space-y-3">
-                        {eventsList.map(event => (
-                          <div key={event.id} className="p-4 border border-green-200 rounded-2xl bg-green-50">
-                            <p className="font-bold text-gray-900 text-sm">{event.eventName}</p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </p>
-                          </div>
-                        ))}
+                  {(() => {
+                    // Filter events to only show current month
+                    const today = new Date();
+                    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                    const filteredEvents = eventsList.filter(event => {
+                      const eventDate = event.eventDate ? event.eventDate.substring(0, 7) : '';
+                      return eventDate === currentMonth;
+                    });
+                    
+                    return (
+                      <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                        <h3 className="text-xl font-bold mb-6 text-gray-900">Events</h3>
+                        <div className="space-y-3">
+                          {filteredEvents.length > 0 ? (
+                            filteredEvents.map(event => (
+                              <div key={event.id} className="p-4 border border-green-200 rounded-2xl bg-green-50 hover:shadow-md transition-all cursor-pointer" onClick={() => {setSelectedEvent(event); setShowEventDetailsModal(true);}}>
+                                <p className="font-bold text-gray-900 text-sm">{event.eventName}</p>
+                                <p className="text-xs text-gray-600 mt-1">
+                                  {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </p>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-gray-400 text-center py-8">No events this month</p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  
-                  <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-                    <h3 className="text-xl font-bold mb-6">Recent Alerts</h3>
-                    <div className="space-y-4">
-                      <AlertItem title="Maintenance Request" time="2h ago" type="maintenance" />
-                      <AlertItem title="New Booking: Unit 4B" time="5h ago" type="booking" />
-                      <AlertItem title="Cleaning Completed" time="Yesterday" type="cleaning" />
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
               </div>
             ) : (
@@ -1437,6 +1915,57 @@ const OwnerDashboard = () => {
                 <p className="text-gray-500 text-lg">Select a property to view reservations and events</p>
               </div>
             )}
+
+            {/* EVENT DETAILS MODAL */}
+            {showEventDetailsModal && selectedEvent && (
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowEventDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto" style={{display: 'flex'}}>
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full mx-4 my-8 overflow-hidden">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-green-600 to-green-700 px-8 py-6">
+                    <h2 className="text-2xl font-black text-white">Event Details</h2>
+                  </div>
+                  
+                  {/* Content */}
+                  <div className="p-8 space-y-6">
+                    <div>
+                      <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Event Name</p>
+                      <p className="text-2xl font-black text-gray-900 mt-2">{selectedEvent.eventName}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Date</p>
+                        <p className="text-lg font-bold text-gray-900 mt-2">
+                          {new Date(selectedEvent.eventDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Type</p>
+                        <p className="text-lg font-bold text-gray-900 mt-2">{selectedEvent.type || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    {selectedEvent.description && (
+                      <div>
+                        <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Description</p>
+                        <p className="text-gray-700 mt-2">{selectedEvent.description}</p>
+                      </div>
+                    )}
+
+                    <div className="pt-4 border-t border-gray-200">
+                      <button 
+                        onClick={() => setShowEventDetailsModal(false)}
+                        className="w-full bg-green-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-green-700 transition-all"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+
           </div>
         )}
 
@@ -1550,7 +2079,11 @@ const OwnerDashboard = () => {
                   {staffList.map((member) => (
                     <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="p-6 font-bold text-gray-900 cursor-pointer text-blue-600 hover:underline" onClick={() => { setSelectedEmployee(member); setShowEmployeeDetailsModal(true); }}>{member.name}</td>
-                      <td className="p-6 text-sm text-gray-500">{member.role}</td>
+                      <td className="p-6 text-sm text-gray-900 font-semibold">
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${member.role === 'Cleaner' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {member.role || 'Unknown'}
+                        </span>
+                      </td>
                       <td className="p-6">
                         <div className="flex justify-center gap-3">
                           <button onClick={() => { setEditingEmployee(member); setEditStaffForm({ firstName: member.name.split(' ')[0] || '', lastName: member.name.split(' ').slice(1).join(' ') || '', email: member.email || '', phoneNumber: member.phoneNumber || '', company: member.company || '', address: member.address || '', city: member.city || '', state: member.state || '', zip: member.zip || '', notes: member.notes || '', cleaner: member.role === 'Cleaner', maintenance: member.role === 'Maintenance' }); setShowEditStaffModal(true); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={18} /></button>
@@ -1638,6 +2171,43 @@ const OwnerDashboard = () => {
               </button>
             </header>
 
+            {/* MONTH FILTER */}
+            <div className="mb-6 flex items-center gap-3">
+              <label className="text-sm font-bold text-gray-600">Filter by Month:</label>
+              <select 
+                value={reservationFilterMonth}
+                onChange={(e) => setReservationFilterMonth(e.target.value)}
+                className="p-3 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-300 text-gray-900 font-semibold cursor-pointer"
+              >
+                {(() => {
+                  const months = [];
+                  const today = new Date();
+                  
+                  // Generate months from 12 months ago to 12 months ahead
+                  for (let i = -12; i <= 12; i++) {
+                    const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                    const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    const monthLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    months.push(
+                      <option key={monthStr} value={monthStr}>
+                        {monthLabel}
+                      </option>
+                    );
+                  }
+                  return months;
+                })()}
+              </select>
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  setReservationFilterMonth(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
+                }}
+                className="px-4 py-3 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-all border border-blue-200"
+              >
+                This Month
+              </button>
+            </div>
+
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-gray-50 border-b border-gray-100">
@@ -1645,29 +2215,61 @@ const OwnerDashboard = () => {
                     <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Guest</th>
                     <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Property</th>
                     <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Dates</th>
-                    <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
                     <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {reservationsList.map((res) => (
-                    <tr key={res.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="p-6 font-bold text-gray-900">{res.guest}</td>
-                      <td className="p-6 text-sm text-gray-500">{res.property}</td>
-                      <td className="p-6 text-sm text-gray-500">{res.checkIn} - {res.checkOut}</td>
-                      <td className="p-6 text-sm">
-                        <span className={`px-2 py-1 rounded-md font-bold ${res.status === 'Confirmed' ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50'}`}>
-                          {res.status}
-                        </span>
-                      </td>
-                      <td className="p-6">
-                        <div className="flex justify-center gap-3">
-                          <button onClick={() => openEditReservationModal(res)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={18} /></button>
-                          <button onClick={() => handleDeleteReservation(res.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    // Filter reservations by month
+                    const [filterYear, filterMonth] = reservationFilterMonth.split('-').map(Number);
+                    const filtered = reservationsList.filter(res => {
+                      const checkInDate = new Date(res.checkIn);
+                      const checkOutDate = new Date(res.checkOut);
+                      // Show reservation if it overlaps with the selected month
+                      return (
+                        (checkInDate.getFullYear() === filterYear && checkInDate.getMonth() + 1 === filterMonth) ||
+                        (checkOutDate.getFullYear() === filterYear && checkOutDate.getMonth() + 1 === filterMonth) ||
+                        (checkInDate <= new Date(filterYear, filterMonth, 0) && checkOutDate > new Date(filterYear, filterMonth - 1, 1))
+                      );
+                    });
+                    
+                    return filtered.length > 0 ? filtered.map((res) => (
+                      <tr key={res.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => {
+                        console.log('Clicked reservation row:', res);
+                        console.log('showReservationDetailsModal before:', showReservationDetailsModal);
+                        setSelectedReservationDetails(res);
+                        setShowReservationDetailsModal(true);
+                        console.log('showReservationDetailsModal after:', true);
+                      }}>
+                        <td className="p-6 font-bold text-gray-900" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedGuest(res.guestUser);
+                              setShowGuestDetailsModal(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-800 hover:underline transition-all cursor-pointer"
+                          >
+                            {res.guest}
+                          </button>
+                        </td>
+                        <td className="p-6 text-sm text-gray-500">{res.property}</td>
+                        <td className="p-6 text-sm text-gray-500">{res.checkIn} - {res.checkOut}</td>
+                        <td className="p-6" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-center gap-3">
+                            <button onClick={() => openEditReservationModal(res)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={18} /></button>
+                            <button onClick={() => handleDeleteReservation(res.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="5" className="p-8 text-center text-gray-400">
+                          No reservations found for {new Date(filterYear, filterMonth - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        </td>
+                      </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1742,6 +2344,7 @@ const OwnerDashboard = () => {
                     {(showUnpaidOnly ? unpaidInvoicesList : invoicesList).map((invoice, index) => {
                       const staffInfo = getStaffInfoById(invoice.staffId);
                       const staff = staffList.find(s => s.id === invoice.staffId);
+                      console.log('Invoice object for delete button:', invoice, 'ID:', invoice.id);
                       return (
                         <tr key={invoice.id || `invoice-${index}`} className="hover:bg-gray-50/50 transition-colors">
                           <td className="p-6 font-bold text-gray-900">{invoice.invoiceNumber || '-'}</td>
@@ -1879,7 +2482,25 @@ const OwnerDashboard = () => {
                       };
                       const response = await createNewInvoice({ token, invoiceData });
                       if (response.isSuccess) {
-                        alert('Maintenance issue reported successfully!');
+                        // Create calendar event for Cleaning, Maintenance, or Repair
+                        const eventResponse = await createInvoiceEvent(
+                          token,
+                          reportIssueForm.type, // "Cleaning", "Maintenance", or "Repair"
+                          reportIssueForm.issueCreatedDate + 'T00:00:00.000Z',
+                          reportIssueForm.addressDate + 'T23:59:59.999Z',
+                          reportIssueForm.description,
+                          selectedPropertyId
+                        );
+                        
+                        // Track the mapping between invoice and event IDs
+                        if (eventResponse && eventResponse.id && response.id) {
+                          setInvoiceEventMap({
+                            ...invoiceEventMap,
+                            [response.id]: eventResponse.id
+                          });
+                        }
+                        
+                        showNotification('Issue reported successfully!', 'success');
                         setShowReportIssueModal(false);
                         setReportIssueForm({
                           company: '',
@@ -1892,12 +2513,39 @@ const OwnerDashboard = () => {
                           amount: '',
                           type: ''
                         });
+                        
+                        // Refresh invoices list
+                        if (selectedPropertyId) {
+                          const allInvoices = await getInvoicesByProperty({ token, propertyId: selectedPropertyId });
+                          setInvoicesList(allInvoices || []);
+                          
+                          const unpaidInvoices = await getNotPaidInvoicesByProperty({ token, propertyId: selectedPropertyId });
+                          setUnpaidInvoicesList(unpaidInvoices || []);
+                        }
+                        
+                        // Refresh events list
+                        const updatedEvents = await getAllEventsByProperty({ token, propertyId: selectedPropertyId });
+                        if (updatedEvents && updatedEvents.events) {
+                          const normalizedEvents = updatedEvents.events.map(event => ({
+                            id: event.id,
+                            eventName: event.event || event.eventName || 'Unknown Event',
+                            eventDate: event.startDate ? event.startDate.split('T')[0] : (event.eventDate ? event.eventDate.split('T')[0] : ''),
+                            description: event.description || '',
+                            type: event.event || '',
+                            completed: event.completed,
+                            startDate: event.startDate,
+                            endDate: event.endDate,
+                            userId: event.userId,
+                            propertyId: event.propertyId
+                          }));
+                          setEventsList(normalizedEvents);
+                        }
                       } else {
-                        alert('Failed to report issue: ' + response.message);
+                        showNotification('Failed to report issue: ' + response.message, 'error');
                       }
                     } catch (error) {
                       console.error('Error reporting issue:', error);
-                      alert('Failed to report issue: ' + error.message);
+                      showNotification('Failed to report issue: ' + error.message, 'error');
                     }
                   }} className="p-8">
                     {/* Row 1: Company & Staff Name */}
@@ -2275,6 +2923,62 @@ const OwnerDashboard = () => {
           </div>
         )}
 
+        {/* GUEST DETAILS MODAL - Global */}
+        {showGuestDetailsModal && selectedGuest && (() => {
+          console.log('GUEST MODAL RENDERING - about to create portal');
+          return createPortal(
+            <>
+              {console.log('GUEST MODAL JSX RENDERING')}
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowGuestDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto" style={{display: 'flex'}}>
+                {console.log('INSIDE GUEST MODAL BACKDROP')}
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4 my-8 overflow-hidden">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+                    <h2 className="text-2xl font-black text-white">Guest Details</h2>
+                  </div>
+              
+                  {/* Content */}
+                  <div className="p-8 space-y-4">
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Name</p>
+                      <p className="text-lg font-black text-gray-900">{selectedGuest.firstName} {selectedGuest.lastName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Email</p>
+                      <p className="text-gray-700">{selectedGuest.email || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Phone</p>
+                      <p className="text-gray-700">{selectedGuest.phoneNumber || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Address</p>
+                      <p className="text-gray-700">{selectedGuest.address || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">City, State ZIP</p>
+                      <p className="text-gray-700">{selectedGuest.city || ''} {selectedGuest.state || ''} {selectedGuest.zip || ''}</p>
+                    </div>
+                    {selectedGuest.notes && (
+                      <div>
+                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Notes</p>
+                        <p className="text-gray-700">{selectedGuest.notes}</p>
+                      </div>
+                    )}
+                    <button 
+                      onClick={() => setShowGuestDetailsModal(false)}
+                      className="w-full mt-6 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+              </>,
+              portalRootRef.current || document.body
+            );
+        })()}
+
         {/* VIEW: CALENDAR */}
         {activeView === 'calendar' && selectedPropertyId && (
           <div className="animate-in fade-in duration-500">
@@ -2356,39 +3060,82 @@ const OwnerDashboard = () => {
                         const reservation = reservationsList.find(r => 
                           r.checkIn <= dateStr && r.checkOut > dateStr
                         );
-                        const event = eventsList.find(e => 
+                        
+                        // Find all events for this date
+                        const dateEvents = eventsList.filter(e => 
                           e.eventDate === dateStr
                         );
+                        
+                        // Check for specific event types - check multiple possible fields
+                        const hasMaintenanceEvent = dateEvents.some(e => {
+                          const text = `${e.eventName || ''} ${e.description || ''} ${e.eventType || ''} ${e.type || ''}`.toLowerCase();
+                          return text.includes('maintenance') || text.includes('maintain');
+                        });
+                        const hasRepairEvent = dateEvents.some(e => {
+                          const text = `${e.eventName || ''} ${e.description || ''} ${e.eventType || ''} ${e.type || ''}`.toLowerCase();
+                          return text.includes('repair') || text.includes('fix') || text.includes('broken');
+                        });
+                        const hasCleaningEvent = dateEvents.some(e => {
+                          const text = `${e.eventName || ''} ${e.description || ''} ${e.eventType || ''} ${e.type || ''}`.toLowerCase();
+                          return text.includes('cleaning') || text.includes('clean') || text.includes('cleaner');
+                        });
+                        
+                        // Determine styling based on reservation
+                        let bgColor = 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50';
+                        
+                        if (reservation) {
+                          bgColor = 'bg-blue-200 text-blue-900 border-2 border-blue-400';
+                        }
                         
                         return (
                           <div
                             key={dateStr}
-                            className={`aspect-square rounded-lg flex items-center justify-center font-semibold transition-all ${
-                              reservation 
-                                ? 'bg-blue-200 text-blue-900 border-2 border-blue-400' 
-                                : event
-                                ? 'bg-green-200 text-green-900 border-2 border-green-400'
-                                : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
-                            }`}
+                            className={`aspect-square rounded-lg flex items-center justify-center font-semibold transition-all relative ${bgColor}`}
                           >
-                            {day}
+                            <span className="text-center">{day}</span>
+                            
+                            {/* Event icons */}
+                            <div className="absolute bottom-1 right-1 flex gap-0.5">
+                              {/* Maintenance icon */}
+                              {hasMaintenanceEvent && (
+                                <Hammer size={14} className="text-orange-600" strokeWidth={2.5} />
+                              )}
+                              
+                              {/* Repair icon */}
+                              {hasRepairEvent && (
+                                <Wrench size={14} className="text-red-600" strokeWidth={2.5} />
+                              )}
+                              
+                              {/* Cleaning icon */}
+                              {hasCleaningEvent && (
+                                <Wind size={14} className="text-purple-600" strokeWidth={2.5} />
+                              )}
+                            </div>
                           </div>
                         );
                       });
                     })()}
                   </div>
 
-                  <div className="mt-6 pt-6 border-t border-gray-200 flex flex-wrap gap-4">
+                  <div className="mt-6 pt-6 border-t border-gray-200 flex flex-wrap gap-6">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 bg-blue-200 border-2 border-blue-400 rounded"></div>
                       <span className="text-sm text-gray-600">Reservation</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 bg-green-200 border-2 border-green-400 rounded"></div>
-                      <span className="text-sm text-gray-600">Event</span>
+                      <Hammer size={16} className="text-orange-600" strokeWidth={2.5} />
+                      <span className="text-sm text-gray-600">Maintenance</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 bg-gray-50 border border-gray-200 rounded"></div>
+                      <Wrench size={16} className="text-red-600" strokeWidth={2.5} />
+                      <span className="text-sm text-gray-600">Repair</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Wind size={16} className="text-purple-600" strokeWidth={2.5} />
+                      <span className="text-sm text-gray-600">Cleaning</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
                       <span className="text-sm text-gray-600">Available</span>
                     </div>
                   </div>
@@ -2400,35 +3147,130 @@ const OwnerDashboard = () => {
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
                   <h3 className="text-xl font-black text-gray-900 mb-6">Reservations & Events</h3>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {reservationsList.length > 0 || eventsList.length > 0 ? (
-                      <>
-                        {/* Reservations */}
-                        {reservationsList.map(res => (
-                          <div key={`res-${res.id}`} className="p-4 bg-blue-50 border border-blue-200 rounded-2xl">
-                            <p className="font-bold text-gray-900 text-sm">{res.guest}</p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {new Date(res.checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(res.checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </p>
-                            <span className={`inline-block mt-2 px-2 py-1 text-xs font-bold rounded-md ${res.status === 'Confirmed' ? 'text-green-600 bg-green-100' : 'text-orange-600 bg-orange-100'}`}>
-                              {res.status}
-                            </span>
-                          </div>
-                        ))}
-                        
-                        {/* Events */}
-                        {eventsList.map(event => (
-                          <div key={`event-${event.id}`} className="p-4 bg-green-50 border border-green-200 rounded-2xl">
-                            <p className="font-bold text-gray-900 text-sm">{event.eventName}</p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">{event.description}</p>
-                          </div>
-                        ))}
-                      </>
-                    ) : (
-                      <p className="text-gray-400 text-sm">No reservations or events for this property</p>
-                    )}
+                    {(() => {
+                      // Filter reservations and events for current calendar month
+                      const monthStart = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-01`;
+                      const monthEnd = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${new Date(calendarYear, calendarMonth + 1, 0).getDate()}`;
+                      
+                      const currentMonthReservations = reservationsList.filter(res => 
+                        !(res.checkOut <= monthStart || res.checkIn > monthEnd)
+                      );
+                      
+                      const currentMonthEvents = eventsList.filter(e => 
+                        e.eventDate >= monthStart && e.eventDate <= monthEnd
+                      );
+
+                      // Categorize events by type - check eventName, description, eventType, and type fields
+                      const maintenanceEvents = currentMonthEvents.filter(e => {
+                        const text = `${e.eventName || ''} ${e.description || ''} ${e.eventType || ''} ${e.type || ''}`.toLowerCase();
+                        return text.includes('maintenance') || text.includes('maintain');
+                      });
+                      const repairEvents = currentMonthEvents.filter(e => {
+                        const text = `${e.eventName || ''} ${e.description || ''} ${e.eventType || ''} ${e.type || ''}`.toLowerCase();
+                        return text.includes('repair') || text.includes('fix') || text.includes('broken');
+                      });
+                      const cleaningEvents = currentMonthEvents.filter(e => {
+                        const text = `${e.eventName || ''} ${e.description || ''} ${e.eventType || ''} ${e.type || ''}`.toLowerCase();
+                        return text.includes('cleaning') || text.includes('clean') || text.includes('cleaner');
+                      });
+                      const otherEvents = currentMonthEvents.filter(e => 
+                        !maintenanceEvents.includes(e) && !repairEvents.includes(e) && !cleaningEvents.includes(e)
+                      );
+                      
+                      console.log('All current month events:', currentMonthEvents);
+                      console.log('Maintenance events:', maintenanceEvents);
+                      console.log('Repair events:', repairEvents);
+                      console.log('Cleaning events:', cleaningEvents);
+                      console.log('Other events:', otherEvents);
+                      console.log('Total eventsList:', eventsList.length);
+                      
+                      return currentMonthReservations.length > 0 || currentMonthEvents.length > 0 || eventsList.length > 0 ? (
+                        <>
+                          {/* Debug info - show if we have events but they're not filtering */}
+                          {eventsList.length > 0 && currentMonthEvents.length === 0 && (
+                            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-2xl">
+                              <p className="font-bold text-gray-900 text-sm">⚠️ Debug: Found {eventsList.length} total events but none for this month</p>
+                              <p className="text-xs text-gray-600 mt-1">Events may be from other months. Check date filters.</p>
+                            </div>
+                          )}
+                          
+                          {/* Show all events if current month is empty but total events exist */}
+                          {currentMonthEvents.length === 0 && eventsList.length > 0 && eventsList.map(event => (
+                            <div key={`raw-event-${event.id}`} className="p-4 bg-yellow-50 border border-yellow-200 rounded-2xl">
+                              <p className="font-bold text-gray-900 text-sm">📋 {event.eventName || event.type || 'Unknown Event'}</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                Date: {event.eventDate || 'No date'}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">{event.description || 'No description'}</p>
+                              <p className="text-xs text-gray-500 mt-1">Type: {event.type || event.eventType || 'Unknown'}</p>
+                            </div>
+                          ))}
+                          {/* Reservations */}
+                          {currentMonthReservations.map(res => (
+                            <div key={`res-${res.id}`} className="p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+                              <p 
+                                onClick={() => {
+                                  setSelectedReservationDetails(res);
+                                  setShowReservationDetailsModal(true);
+                                }}
+                                className="font-bold text-gray-900 text-sm cursor-pointer hover:text-blue-600 hover:underline transition-colors"
+                              >
+                                {res.guest}
+                              </p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {new Date(res.checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(res.checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </p>
+                            </div>
+                          ))}
+                          
+                          {/* Maintenance Events */}
+                          {maintenanceEvents.map(event => (
+                            <div key={`event-${event.id}`} className="p-4 bg-orange-50 border border-orange-200 rounded-2xl">
+                              <p className="font-bold text-gray-900 text-sm">🔧 {event.eventName}</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">{event.description}</p>
+                            </div>
+                          ))}
+
+                          {/* Repair Events */}
+                          {repairEvents.map(event => (
+                            <div key={`event-${event.id}`} className="p-4 bg-red-50 border border-red-200 rounded-2xl">
+                              <p className="font-bold text-gray-900 text-sm">⚠️ {event.eventName}</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">{event.description}</p>
+                            </div>
+                          ))}
+
+                          {/* Cleaning Events */}
+                          {cleaningEvents.map(event => (
+                            <div key={`event-${event.id}`} className="p-4 bg-purple-50 border border-purple-200 rounded-2xl">
+                              <p className="font-bold text-gray-900 text-sm">🧹 {event.eventName}</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">{event.description}</p>
+                            </div>
+                          ))}
+
+                          {/* Other Events */}
+                          {otherEvents.map(event => (
+                            <div key={`event-${event.id}`} className="p-4 bg-gray-50 border border-gray-200 rounded-2xl">
+                              <p className="font-bold text-gray-900 text-sm">{event.eventName}</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">{event.description}</p>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <p className="text-gray-400 text-sm">No reservations or events for this month</p>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -2443,11 +3285,110 @@ const OwnerDashboard = () => {
         show={showReservationModal}
         isEditing={editingReservation !== null}
         formData={reservationForm}
-        onFormChange={(field, value) => setReservationForm({...reservationForm, [field]: value})}
+        onFormChange={(field, value) => {
+          setReservationForm({...reservationForm, [field]: value});
+          // Clear error for this field when user starts typing
+          setReservationErrors({...reservationErrors, [field]: false});
+        }}
         onSave={handleSaveReservation}
         onCancel={closeReservationModal}
         cleaners={cleanersList}
+        errors={reservationErrors}
       />
+
+      {/* RESERVATION DETAILS MODAL */}
+      {showReservationDetailsModal && selectedReservationDetails && (() => {
+        console.log('Rendering modal with reservation:', selectedReservationDetails);
+        console.log('showReservationDetailsModal:', showReservationDetailsModal);
+        return createPortal(
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-black text-white">Reservation Details</h2>
+                <button 
+                  onClick={() => {
+                    setShowReservationDetailsModal(false);
+                    setSelectedReservationDetails(null);
+                  }}
+                  className="text-blue-200 hover:text-white text-2xl transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="p-8 space-y-4">
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Guest Name</p>
+                <p className="text-lg font-bold text-slate-900">{selectedReservationDetails.guest}</p>
+              </div>
+              
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Property</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.property}</p>
+              </div>
+              
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Confirmation Number</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.confirmationNumber}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Customer ID</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.customerId}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Check-in Date</p>
+                <p className="text-lg text-slate-700">{new Date(selectedReservationDetails.checkIn).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Check-out Date</p>
+                <p className="text-lg text-slate-700">{new Date(selectedReservationDetails.checkOut).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Lock Code</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.lockCode || 'Not set'}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Assigned Cleaner</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.staffId || 'Not assigned'}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Number of Guests</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.numberOfGuests || 'Not specified'}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Dogs</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.hasDogs ? 'Yes' : 'No'}</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 px-8 py-4 border-t border-slate-200 flex gap-3">
+              <button 
+                onClick={() => {
+                  setShowReservationDetailsModal(false);
+                  setSelectedReservationDetails(null);
+                }}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      );
+      })()}
 
       {/* OWNER DETAILS MODAL */}
       {showOwnerModal && selectedOwner && (
@@ -2546,7 +3487,7 @@ const AlertItem = ({ title, time, type }) => (
 );
 
 // Reservation Modal Component (inside OwnerDashboard but before export)
-function ReservationModal({ show, isEditing, formData, onFormChange, onSave, onCancel, cleaners = [] }) {
+function ReservationModal({ show, isEditing, formData, onFormChange, onSave, onCancel, cleaners = [], errors = {} }) {
   if (!show) return null;
 
   return (
@@ -2562,31 +3503,45 @@ function ReservationModal({ show, isEditing, formData, onFormChange, onSave, onC
         {/* Content */}
         <div className="p-8 space-y-4 max-h-96 overflow-y-auto pb-6 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-gray-100">
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Confirmation Number</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Confirmation Number <span className="text-red-500">*</span></label>
             <input 
               type="text"
-              value={formData.confirmationNumber}
+              value={formData.confirmationNumber?.toString() || ''}
               onChange={(e) => onFormChange('confirmationNumber', e.target.value)}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 text-gray-900"
+              className={`w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 text-gray-900 transition-all ${
+                errors.confirmationNumber 
+                  ? 'border-red-500 focus:ring-red-200 bg-red-50' 
+                  : 'border-gray-200 focus:ring-blue-200'
+              }`}
               placeholder="Confirmation #"
+              required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Customer ID</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Customer ID <span className="text-red-500">*</span></label>
             <input 
               type="text"
-              value={formData.customerId}
+              value={formData.customerId?.toString() || ''}
               onChange={(e) => onFormChange('customerId', e.target.value)}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 text-gray-900"
+              className={`w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 text-gray-900 transition-all ${
+                errors.customerId 
+                  ? 'border-red-500 focus:ring-red-200 bg-red-50' 
+                  : 'border-gray-200 focus:ring-blue-200'
+              }`}
               placeholder="Customer ID"
+              required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Check-in to Check-out Dates</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Check-in to Check-out Dates <span className="text-red-500">*</span></label>
             <div className="flex gap-2 items-center">
-              <div className="react-datepicker-wrapper flex-1" style={{color: '#111827', fontSize: '0.95rem'}}>
+              <div className={`react-datepicker-wrapper flex-1 border rounded-xl transition-all ${
+                errors.checkInDate || errors.checkoutDate 
+                  ? 'border-red-500 bg-red-50' 
+                  : 'border-gray-200'
+              }`} style={{color: '#111827', fontSize: '0.95rem'}}>
                 <DatePicker
                   selectsRange
                   startDate={formData.checkInDate ? (() => {
@@ -2643,30 +3598,81 @@ function ReservationModal({ show, isEditing, formData, onFormChange, onSave, onC
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Lock Code</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Lock Code <span className="text-red-500">*</span></label>
             <input 
               type="text"
-              value={formData.lockCode}
+              value={formData.lockCode?.toString() || ''}
               onChange={(e) => onFormChange('lockCode', e.target.value)}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 text-gray-900"
+              className={`w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 text-gray-900 transition-all ${
+                errors.lockCode 
+                  ? 'border-red-500 focus:ring-red-200 bg-red-50' 
+                  : 'border-gray-200 focus:ring-blue-200'
+              }`}
               placeholder="Lock code"
+              required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Cleaner</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Cleaner <span className="text-red-500">*</span></label>
             <select 
               value={formData.staffId}
               onChange={(e) => onFormChange('staffId', e.target.value)}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 text-gray-900"
+              className={`w-full p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 text-gray-900 transition-all ${
+                errors.staffId 
+                  ? 'border-red-500 focus:ring-red-200 bg-red-50' 
+                  : 'border-gray-200 focus:ring-blue-200'
+              }`}
+              required
             >
-              <option value="">Select a cleaner (optional)</option>
+              <option value="">Select a cleaner</option>
               {cleaners.map(cleaner => (
                 <option key={cleaner.id} value={cleaner.id}>
                   {cleaner.name || `${cleaner.firstName} ${cleaner.lastName}`.trim()}
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Number of Guests</label>
+            <input 
+              type="number"
+              min="1"
+              max="20"
+              value={formData.numberOfGuests}
+              onChange={(e) => onFormChange('numberOfGuests', e.target.value)}
+              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 text-gray-900"
+              placeholder="Enter number of guests"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Dogs</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio"
+                  name="hasDogs"
+                  value="yes"
+                  checked={formData.hasDogs === true || formData.hasDogs === 'yes'}
+                  onChange={() => onFormChange('hasDogs', true)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-gray-700">Yes</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio"
+                  name="hasDogs"
+                  value="no"
+                  checked={formData.hasDogs === false || formData.hasDogs === 'no'}
+                  onChange={() => onFormChange('hasDogs', false)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-gray-700">No</span>
+              </label>
+            </div>
           </div>
         </div>
 
