@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
+import { jwtDecode } from 'jwt-decode';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -35,63 +36,90 @@ const MaintenancePortal = () => {
   // Get propertyId from navigation state or localStorage
   const propertyId = location.state?.propertyId || localStorage.getItem('propertyId') || '1';
   
+  // Extract userId from token stored in state or localStorage
+  const [userId, setUserId] = useState(null);
+  
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const decoded = jwtDecode(token);
+        console.log('Decoded token:', decoded);
+        console.log('All token properties:', Object.keys(decoded));
+        
+        // AccessLevel is in the token
+        const accessLevel = decoded["AccessLevel"] || decoded["accessLevel"] || decoded["role"] || decoded["Role"];
+        console.log('Access Level from token:', accessLevel);
+        
+        // Try different possible keys for userId - if not found, use accessLevel as identifier
+        const extractedUserId = decoded["UserId"] || decoded["userId"] || decoded["sub"] || decoded["id"] || accessLevel;
+        console.log('Extracted userId/accessLevel value:', extractedUserId);
+        if (extractedUserId) {
+          const parsedUserId = parseInt(extractedUserId);
+          console.log('Parsed userId:', parsedUserId);
+          setUserId(parsedUserId);
+          console.log('User ID extracted from token:', parsedUserId);
+        }
+      }
+    } catch (error) {
+      console.error('Error decoding token:', error);
+    }
+  }, []);
+  
   // Mock maintenance work orders data
-  const [workOrders, setWorkOrders] = useState([
-    { 
-      id: 1, 
-      propertyName: 'Beachfront Villa', 
-      address: '123 Ocean Drive',
-      issueType: 'Plumbing',
-      description: 'Fix leaky kitchen faucet',
-      priority: 'high',
-      status: 'pending', // pending, in-progress, completed
-      reportedDate: '2026-01-23',
-      scheduledDate: null,
-      startTime: null,
-      endTime: null,
-      notes: ''
-    },
-    { 
-      id: 2, 
-      propertyName: 'Mountain Cabin', 
-      address: '456 Peak Lane',
-      issueType: 'HVAC',
-      description: 'Furnace not heating properly',
-      priority: 'medium',
-      status: 'pending',
-      reportedDate: '2026-01-24',
-      scheduledDate: null,
-      startTime: null,
-      endTime: null,
-      notes: ''
-    },
-    { 
-      id: 3, 
-      propertyName: 'City Apartment', 
-      address: '789 Downtown St',
-      issueType: 'Electrical',
-      description: 'Replace light switch in master bedroom',
-      priority: 'low',
-      status: 'completed',
-      reportedDate: '2026-01-20',
-      scheduledDate: '2026-01-25',
-      startTime: '10:00',
-      endTime: '10:30',
-      notes: 'Completed successfully'
-    },
-  ]);
+  const [workOrders, setWorkOrders] = useState([]);
 
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editNotes, setEditNotes] = useState('');
 
-  // Compute unpaid invoices list (all fetched invoices are considered unpaid)
-  const unpaidInvoicesList = invoicesList;
+  // Compute unpaid invoices list filtered by current user (staffId matches userId)
+  const unpaidInvoicesList = userId 
+    ? invoicesList.filter(invoice => parseInt(invoice.staffId) === parseInt(userId))
+    : invoicesList;
 
   // Debug log
   useEffect(() => {
     console.log('Unpaid invoices count:', unpaidInvoicesList.length);
     console.log('Button color should be:', unpaidInvoicesList.length > 0 ? 'RED (#dc2626)' : 'GREEN (#10b981)');
+  }, [unpaidInvoicesList]);
+
+  // Populate workOrders from unpaidInvoicesList
+  useEffect(() => {
+    if (unpaidInvoicesList.length > 0) {
+      const orders = unpaidInvoicesList.map(invoice => {
+        // Determine status based on invoice state
+        let status = 'pending';
+        if (invoice.completed) status = 'completed';
+        else if (!invoice.pending) status = 'in-progress';
+        
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          invoiceDescription: invoice.invoiceDescription,
+          staffId: invoice.staffId,
+          amount: invoice.amount,
+          type: invoice.type,
+          dateCreated: invoice.dateCreated,
+          repairDescription: invoice.repairDescription,
+          // Display properties
+          propertyName: invoice.repairDescription || 'Maintenance Work',
+          address: 'Address TBD',
+          issueType: invoice.type || 'Maintenance',
+          description: invoice.repairDescription || 'Work to be completed',
+          priority: 'medium',
+          reportedDate: invoice.dateCreated?.split('T')[0] || new Date().toISOString().split('T')[0],
+          status: status,
+          scheduledDate: invoice.dateToBeAddressed?.split('T')[0] || null,
+          startTime: null,
+          endTime: null,
+          notes: ''
+        };
+      });
+      setWorkOrders(orders);
+    } else {
+      setWorkOrders([]);
+    }
   }, [unpaidInvoicesList]);
 
   const handleStartWork = (orderId) => {
