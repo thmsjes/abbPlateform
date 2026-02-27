@@ -34,10 +34,17 @@ const Login = () => {
       const token = data.token || data.data?.token || data.accessToken;
       const propertyId = data.propertyId || data.PropertyId || data.data?.propertyId || data.data?.PropertyId;
       const propertyIds = data.propertyIds || data.PropertyIds || data.data?.propertyIds || data.data?.PropertyIds;
+      const loginUserId = data.userId || data.UserId || data.id || data.Id || data.data?.userId || data.data?.UserId || data.data?.id || data.data?.Id;
       
       if (data.isSuccess && token) {
         // 3. Store the real JWT and user data from the backend
         localStorage.setItem('token', token);
+
+        const parsedLoginUserId = parseInt(loginUserId, 10);
+        if (!Number.isNaN(parsedLoginUserId) && parsedLoginUserId > 0) {
+          localStorage.setItem('userId', parsedLoginUserId.toString());
+          localStorage.setItem('ownerId', parsedLoginUserId.toString());
+        }
         
         // Store property IDs - handle both single and multiple
         let idsToStore = [];
@@ -51,8 +58,8 @@ const Login = () => {
           localStorage.setItem('propertyId', propertyId);
           console.log('PropertyId saved:', propertyId);
         } else {
-          console.warn('No propertyId or propertyIds found in login response');
-          console.log('Full login response:', data);
+          localStorage.removeItem('propertyIds');
+          localStorage.removeItem('propertyId');
         }
       
         // 4. Decode the JWT to get the user's access level
@@ -60,6 +67,26 @@ const Login = () => {
           const decoded = jwtDecode(token);
           console.log('Decoded token:', decoded);
           console.log('Intended portal:', intendedPortal);
+
+          const userIdCandidates = [
+            decoded['OwnerId'],
+            decoded['ownerId'],
+            decoded['UserId'],
+            decoded['userId'],
+            decoded['id'],
+            decoded['sub'],
+            decoded['nameid'],
+            decoded['nameidentifier'],
+            decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'],
+            decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name']
+          ];
+          const resolvedUserId = userIdCandidates
+            .map(value => parseInt(value, 10))
+            .find(value => !Number.isNaN(value) && value > 0);
+          if (resolvedUserId) {
+            localStorage.setItem('userId', resolvedUserId.toString());
+            localStorage.setItem('ownerId', resolvedUserId.toString());
+          }
           
           // Extract PropertyId from token
           const propertyIdFromToken = decoded["PropertyId"] || decoded["propertyId"];

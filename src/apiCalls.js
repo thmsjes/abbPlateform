@@ -69,6 +69,38 @@ export const getPropertyById = async ({token, propertyId}) => {
     throw error;
   }
 };
+
+export const getUserById = async ({ token, id }) => {
+  try {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/User`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        id
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching user by ID:", error);
+    throw error;
+  }
+};
+
+export const createProperty = async ({ token, propertyData }) => {
+  try {
+    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/createProperty`, propertyData, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error creating property:", error);
+    throw error;
+  }
+};
+
 export const createExpense = async ({ token, expenseData }) => {
   try {
     const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/expense`, expenseData, {
@@ -123,14 +155,21 @@ export const getMileage = async ({ token, propertyId }) => {
 // Reservation API calls
 export const createReservation = async ({token, reservationData}) => {
   try {
-    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/createReservation`, reservationData, {
+    const url = `${import.meta.env.VITE_API_URL_BASE}/api/createReservation`;
+    const response = await axios.post(url, reservationData, {
       headers: {
         Authorization: `Bearer ${token}`
       }
     });
     return response.data;
   } catch (error) {
-    console.error("Error creating reservation:", error);
+    console.error("Error creating reservation:", {
+      url: `${import.meta.env.VITE_API_URL_BASE}/api/createReservation`,
+      code: error?.code,
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data
+    });
     throw error;
   }
 };
@@ -339,6 +378,100 @@ export const deleteTransaction = async ({token, id}) => {
     return response.data;
   } catch (error) {
     console.error("Error deleting transaction:", error);
+    throw error;
+  }
+};
+
+export const getReservationByReference = async (bookingReference) => {
+  try {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getAllReservationsByReference`, {
+      params: {
+        confirmationNumber: bookingReference
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching reservation:", error);
+    throw error;
+  }
+};
+
+// Review API Calls
+export const getReviewsByPropertyId = async ({ token, propertyId }) => {
+  try {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getReviewsByPropertyId`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        propertyId: propertyId
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching reviews:", error);
+    throw error;
+  }
+};
+
+export const getReviewById = async ({ token, reviewId }) => {
+  try {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getReviewById`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        reviewId: reviewId
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching review:", error);
+    throw error;
+  }
+};
+
+export const createReview = async ({ token, reviewData }) => {
+  try {
+    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/createReview`, reviewData, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error creating review:", error);
+    throw error;
+  }
+};
+
+export const updateReview = async ({ token, reviewData }) => {
+  try {
+    const response = await axios.put(`${import.meta.env.VITE_API_URL_BASE}/api/updateReview`, reviewData, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error updating review:", error);
+    throw error;
+  }
+};
+
+export const deleteReview = async ({ token, reviewId }) => {
+  try {
+    const response = await axios.delete(`${import.meta.env.VITE_API_URL_BASE}/api/deleteReview`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        reviewId: reviewId
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting review:", error);
     throw error;
   }
 };

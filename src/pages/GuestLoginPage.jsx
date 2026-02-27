@@ -1,17 +1,45 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyRound, ArrowRight, MapPin } from 'lucide-react';
+import { getReservationByReference } from '../apiCalls';
 
 const GuestLogin = () => {
   const [bookingRef, setBookingRef] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleGuestLogin = (e) => {
+  const handleGuestLogin = async (e) => {
     e.preventDefault();
-    // Simulate finding the booking in your .NET backend
-    localStorage.setItem('userRole', 'guest');
-    localStorage.setItem('bookingRef', bookingRef);
-    navigate('/guest-dashboard');
+    setLoading(true);
+    setError('');
+
+    try {
+      const reservationData = await getReservationByReference(bookingRef);
+      
+      // Validate that the response contains a confirmationNumber
+      if (!reservationData.confirmationNumber) {
+        setError('Booking reference not found. Please check and try again.');
+        setLoading(false);
+        return;
+      }
+      
+      // Store reservation data and role
+      localStorage.setItem('userRole', 'guest');
+      localStorage.setItem('bookingRef', bookingRef);
+      localStorage.setItem('reservationData', JSON.stringify(reservationData));
+      localStorage.setItem('guestName', `${reservationData.firstName} ${reservationData.lastName}`);
+      
+      navigate('/guest-dashboard');
+    } catch (err) {
+      console.error('Error fetching reservation:', err);
+      if (err.response?.status === 404) {
+        setError('Booking reference not found. Please check and try again.');
+      } else {
+        setError('Unable to connect to the server. Please try again.');
+      }
+      setLoading(false);
+    }
   };
 
   return (
@@ -29,10 +57,16 @@ const GuestLogin = () => {
             placeholder="Booking Reference (e.g. HM123)"
             className="w-full px-6 py-4 bg-gray-500 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-pink-500 outline-none transition-all text-center font-bold tracking-widest uppercase"
             onChange={(e) => setBookingRef(e.target.value)}
+            value={bookingRef}
             required
+            disabled={loading}
           />
-          <button className="w-full bg-pink-500 text-white py-4 rounded-2xl font-black hover:bg-pink-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-100">
-            Enter Portal <ArrowRight size={20} />
+          {error && <p className="text-red-500 text-sm font-semibold">{error}</p>}
+          <button 
+            className="w-full bg-pink-500 text-white py-4 rounded-2xl font-black hover:bg-pink-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-100 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            disabled={loading}
+          >
+            {loading ? 'Checking Booking...' : 'Enter Portal'} {!loading && <ArrowRight size={20} />}
           </button>
         </form>
 

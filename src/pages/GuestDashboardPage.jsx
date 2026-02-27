@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Wifi, BookOpen, Map, LogOut, Info, ClipboardCheck, MessageSquare, AlertCircle, X, MapPin, Phone, Thermometer, Tv } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Wifi, BookOpen, Map, LogOut, Info, ClipboardCheck, MessageSquare, AlertCircle, X, MapPin, Phone, Thermometer, Tv, Calendar, Home, Users, Dog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 
 const GuestDashboard = () => {
   const navigate = useNavigate();
+  const [reservationData, setReservationData] = useState(null);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [showHouseManualModal, setShowHouseManualModal] = useState(false);
   const [showLocalGuideModal, setShowLocalGuideModal] = useState(false);
@@ -13,7 +14,45 @@ const GuestDashboard = () => {
   const [showWifiModal, setShowWifiModal] = useState(false);
   const [showTemperatureModal, setShowTemperatureModal] = useState(false);
   const [showTvModal, setShowTvModal] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+
+  useEffect(() => {
+    // Load reservation data from localStorage
+    const storedData = localStorage.getItem('reservationData');
+    if (storedData) {
+      try {
+        setReservationData(JSON.parse(storedData));
+      } catch (err) {
+        console.error('Error parsing reservation data:', err);
+      }
+    }
+  }, []);
+
+  const handleCopyPassword = async () => {
+    const wifiPassword = 'SylvanBeach2024!'; // The WiFi password
+    try {
+      await navigator.clipboard.writeText(wifiPassword);
+      setPasswordCopied(true);
+      // Reset button text after 2 seconds
+      setTimeout(() => setPasswordCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy password:', err);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = wifiPassword;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setPasswordCopied(true);
+        setTimeout(() => setPasswordCopied(false), 2000);
+      } catch (fallbackErr) {
+        console.error('Fallback copy also failed:', fallbackErr);
+      }
+      document.body.removeChild(textArea);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -40,25 +79,139 @@ const GuestDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
+      {/* Fixed Logout Button for Mobile - Floating at bottom right */}
+      <button 
+        onClick={handleLogout}
+        className="fixed bottom-8 right-4 sm:hidden flex items-center justify-center gap-2 bg-pink-600 text-white px-4 py-3 rounded-full text-sm font-semibold hover:bg-pink-700 transition-all shadow-lg z-50"
+        title="Logout"
+      >
+        <LogOut size={18} /> <span>Logout</span>
+      </button>
+      
       {/* 1. MATCHING HEADER: Uses same height/feel as landing */}
       <header className="relative h-[25vh] sm:h-[30vh] w-full bg-gray-900 overflow-hidden">
         {/* You can replace this with a subtle image of the house to match the landing hero */}
         <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-black/60 flex flex-col sm:flex-row items-center justify-between px-4 sm:px-8 md:px-20 gap-2 sm:gap-4">
           <div className="text-center sm:text-left">
-            <h1 className="text-2xl sm:text-4xl font-bold text-white mb-1 sm:mb-2">Guest Dashboard</h1>
-            <p className="text-xs sm:text-base text-pink-200 font-medium">Your stay at Serenity on Sylvan</p>
+            <h1 className="text-2xl sm:text-4xl font-bold text-white mb-1 sm:mb-2">
+              Welcome {reservationData?.firstName}!
+            </h1>
+            <p className="text-xs sm:text-base text-pink-200 font-medium">to your Serenity on Sylvan Guest Portal</p>
           </div>
           <button 
             onClick={handleLogout}
-            className="flex items-center gap-1 sm:gap-2 bg-pink-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-semibold hover:bg-pink-700 transition-all shadow-lg whitespace-nowrap"
+            className="hidden sm:flex items-center gap-1 sm:gap-2 bg-pink-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-semibold hover:bg-pink-700 transition-all shadow-lg whitespace-nowrap"
           >
-            <LogOut size={16} className="sm:w-5 sm:h-5" /> <span className="hidden sm:inline">Logout</span>
+            <LogOut size={16} className="sm:w-5 sm:h-5" /> <span>Logout</span>
           </button>
         </div>
       </header>
 
       {/* 2. MATCHING CONTAINER: max-w-6xl like landing page */}
       <main className="max-w-6xl mx-auto px-3 sm:px-4 -mt-8 sm:-mt-10 relative z-10">
+        
+        {/* RESERVATION INFO CARD */}
+        {reservationData && (
+          <div className="bg-white rounded-3xl p-4 sm:p-8 shadow-2xl border border-pink-100 mb-8 sm:mb-10">
+            {/* Header */}
+            <div className="mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-gray-200">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Your Reservation</h2>
+              <p className="text-gray-600">Confirmation #{reservationData.confirmationNumber}</p>
+            </div>
+
+            {/* Property Information Section */}
+            <div className="mb-6 sm:mb-8">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Home size={20} className="text-pink-600" /> Property Details
+              </h3>
+              <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-2xl p-4 sm:p-6 border border-pink-200 hover:shadow-lg transition-shadow">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-6">
+                  <div className="flex-1">
+                    <h4 className="text-2xl font-bold text-gray-900 mb-3">{reservationData.propertyName}</h4>
+                    <div className="space-y-2 text-gray-700">
+                      <p className="font-semibold">{reservationData.address}</p>
+                      <p>{reservationData.city}, {reservationData.state} {reservationData.zip}</p>
+                    </div>
+                  </div>
+                  <a 
+                    href={`https://www.google.com/maps/search/${encodeURIComponent(reservationData.address + ' ' + reservationData.city + ' ' + reservationData.state + ' ' + reservationData.zip)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 sm:gap-2 bg-pink-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-semibold hover:bg-pink-700 transition-all shadow-lg whitespace-nowrap h-fit !text-white"
+                  >
+                    <MapPin size={16} className="sm:w-5 sm:h-5" /> <span>Get Directions</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Stay Details Grid */}
+            <div className="mb-6 sm:mb-8">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Calendar size={20} className="text-pink-600" /> Stay Details
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {/* Check-in */}
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-In (3:00 pm)</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {new Date(reservationData.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {new Date(reservationData.checkInDate).toLocaleDateString('en-US', { weekday: 'short' })}
+                  </p>
+                </div>
+
+                {/* Check-out */}
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-Out (10:00 am)</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { weekday: 'short' })}
+                  </p>
+                </div>
+
+                {/* Lock Code */}
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Lock Code</p>
+                  <p className="text-2xl font-bold text-gray-900 font-mono tracking-wider">{reservationData.lockCode.trim()}</p>
+                  <p className="text-xs text-gray-600 mt-1">Required for entry</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Guest Details Grid */}
+            <div>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Users size={20} className="text-pink-600" /> Guest Information
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {/* Guest Name */}
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Guest Name</p>
+                  <p className="text-xl font-bold text-gray-900">{reservationData.firstName}</p>
+                  <p className="text-lg font-bold text-gray-800">{reservationData.lastName}</p>
+                </div>
+
+                {/* Guest Count */}
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Number of Guests</p>
+                  <p className="text-2xl font-bold text-gray-900">{reservationData.guestCount}</p>
+                  <p className="text-xs text-gray-600 mt-1">people</p>
+                </div>
+
+                {/* Dogs */}
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Dogs</p>
+                  <p className="text-2xl font-bold text-gray-900">{reservationData.dogs}</p>
+                  <p className="text-xs text-gray-600 mt-1">in your party</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* 3. WIFI CARD: Styled like the AmenityItems on your landing page */}
         <div className="bg-white rounded-2xl p-3 sm:p-6 shadow-xl border border-gray-100 mb-6 sm:mb-8 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
@@ -71,8 +224,15 @@ const GuestDashboard = () => {
               <p className="font-bold text-base sm:text-xl text-gray-800">yourgetawayatsylvan.com</p>
             </div>
           </div>
-          <button className="w-full md:w-auto bg-gray-900 text-white px-4 sm:px-8 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-bold hover:bg-pink-600 transition-all active:scale-95">
-            Copy Password
+          <button 
+            onClick={handleCopyPassword}
+            className={`w-full md:w-auto px-4 sm:px-8 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-bold transition-all active:scale-95 ${
+              passwordCopied 
+                ? 'bg-green-600 text-white hover:bg-green-700' 
+                : 'bg-gray-900 text-white hover:bg-pink-600'
+            }`}
+          >
+            {passwordCopied ? '✓ Copied!' : 'Copy Password'}
           </button>
         </div>
 
@@ -133,8 +293,8 @@ const GuestDashboard = () => {
 
       {/* Emergency Contacts Modal */}
       {showEmergencyModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="sticky top-0 bg-gradient-to-r from-red-600 to-red-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-red-200">
               <div className="flex items-center gap-2 sm:gap-3">
@@ -172,7 +332,7 @@ const GuestDashboard = () => {
             </div>
 
             {/* Content */}
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               {/* Always show Our House contact first */}
               {emergencyContacts.find(c => c.type === 'House Address') && (
                 <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-300 hover:border-red-400 transition-all">
@@ -265,8 +425,8 @@ const GuestDashboard = () => {
 
       {/* House Manual Modal */}
       {showHouseManualModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-blue-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <BookOpen size={24} className="sm:w-7 sm:h-7" />
@@ -279,7 +439,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border border-blue-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2">House Rules & Instructions</h3>
                 <p className="text-black text-sm sm:text-base">Welcome to our home! Please review the following guidelines to ensure a comfortable stay:</p>
@@ -290,7 +450,8 @@ const GuestDashboard = () => {
                   <li>Pets must be declared and approved in advance</li>
                   <li>Respect all house amenities and furnishings</li>
                   <li>Lock all doors and windows when leaving</li>
-                  <li>Return keys to the lockbox before departure</li>
+                  <li>There are keys to the bike locks and a remote garage door opener in the coffee bar. Please make sure they are returned.</li>
+                  <li>Please take the garbage and recycling bins to the road Sunday evening for an early Monday morning pickup.</li>
                 </ul>
               </div>
             </div>
@@ -309,8 +470,8 @@ const GuestDashboard = () => {
 
       {/* Local Guide Modal */}
       {showLocalGuideModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-green-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <Map size={24} className="sm:w-7 sm:h-7" />
@@ -323,7 +484,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-green-50 rounded-xl p-3 sm:p-4 border border-green-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2 sm:mb-3">Nearby Attractions & Dining - click for info</h3>
                 <div className="space-y-2 sm:space-y-3">
@@ -403,8 +564,8 @@ const GuestDashboard = () => {
 
       {/* Check-out Info Modal */}
       {showCheckoutModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-orange-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-orange-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <ClipboardCheck size={24} className="sm:w-7 sm:h-7" />
@@ -417,7 +578,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-orange-50 rounded-xl p-3 sm:p-4 border border-orange-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2 sm:mb-3">Departure Checklist</h3>
                 <div className="space-y-1.5 sm:space-y-2">
@@ -463,8 +624,8 @@ const GuestDashboard = () => {
 
       {/* Contact Host Modal */}
       {showContactHostModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-purple-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <MessageSquare size={24} className="sm:w-7 sm:h-7" />
@@ -477,7 +638,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-purple-50 rounded-xl p-3 sm:p-4 border border-purple-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2 sm:mb-3">Get in Touch with your hosts, Tom and Erina</h3>
                 <div className="space-y-2 sm:space-y-3">
@@ -525,8 +686,8 @@ const GuestDashboard = () => {
 
       {/* WiFi Setup Modal */}
       {showWifiModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-cyan-600 to-cyan-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-cyan-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <Wifi size={24} className="sm:w-7 sm:h-7" />
@@ -539,7 +700,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-cyan-50 rounded-xl p-3 sm:p-4 border border-cyan-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2 sm:mb-3">Network Information</h3>
                 <div className="space-y-2 sm:space-y-3">
@@ -549,7 +710,7 @@ const GuestDashboard = () => {
                   </div>
                   <div>
                     <p className="text-xs text-black font-semibold uppercase">Password</p>
-                    <p className="text-black text-sm sm:text-base font-bold">yourgetawayatsylvan.com!</p>
+                    <p className="text-black text-sm sm:text-base font-bold">yourgetawayatsylvan.com</p>
                   </div>
                   <div>
                     <p className="text-xs text-black font-semibold uppercase">Connection Tips</p>
@@ -581,8 +742,8 @@ const GuestDashboard = () => {
 
       {/* Temperature Control Modal */}
       {showTemperatureModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-amber-600 to-amber-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-amber-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <Thermometer size={24} className="sm:w-7 sm:h-7" />
@@ -595,7 +756,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-amber-50 rounded-xl p-3 sm:p-4 border border-amber-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2 sm:mb-3">Thermostat & Climate Control</h3>
                 <div className="space-y-2 sm:space-y-3">
@@ -645,8 +806,8 @@ const GuestDashboard = () => {
 
       {/* TVs & Entertainment Modal */}
       {showTvModal && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg md:max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-4 sm:p-6 flex items-center justify-between border-b border-indigo-200">
               <div className="flex items-center gap-2 sm:gap-3">
                 <Tv size={24} className="sm:w-7 sm:h-7" />
@@ -659,7 +820,7 @@ const GuestDashboard = () => {
                 <X size={20} className="sm:w-6 sm:h-6" />
               </button>
             </div>
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-indigo-50 rounded-xl p-3 sm:p-4 border border-indigo-200">
                 <h3 className="font-bold text-base sm:text-lg text-black mb-2 sm:mb-3">TV Setup & Remote Controls</h3>
                 <div className="space-y-2 sm:space-y-3">

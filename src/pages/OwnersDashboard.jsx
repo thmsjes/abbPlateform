@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -23,11 +23,12 @@ import {
   Sparkles,
   AlertCircle,
   Wind,
-  Hammer
+  Hammer,
+  Star
 } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
 import Transactions from '../components/Transactions';
-import { getExpenses, getPropertyById, createReservation, updateReservation, deleteReservation, getUsersByPropertyId, getAllReservationsByPropertyId, getAllEventsByProperty, createNewInvoice, getInvoicesByProperty, getNotPaidInvoicesByProperty, updateInvoice, deleteInvoice, createExpense, createEvent, updateEvent, deleteEvent } from '../apiCalls';
+import { getExpenses, getPropertyById, getUserById, createProperty, createReservation, updateReservation, deleteReservation, getUsersByPropertyId, getAllReservationsByPropertyId, getAllEventsByProperty, createNewInvoice, getInvoicesByProperty, getNotPaidInvoicesByProperty, updateInvoice, deleteInvoice, createExpense, createEvent, updateEvent, deleteEvent, getReviewsByPropertyId, createReview, updateReview, deleteReview } from '../apiCalls';
 
 const OwnerDashboard = () => {
   const navigate = useNavigate();
@@ -41,12 +42,16 @@ const OwnerDashboard = () => {
   const [selectedPropertyDetails, setSelectedPropertyDetails] = useState(null);
   const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(null);
-  const [currentFilters, setCurrentFilters] = useState({ dateFrom: '', dateTo: '' });
+  const [currentFilters, _setCurrentFilters] = useState({ dateFrom: '', dateTo: '' });
   const [calendarYear, setCalendarYear] = useState(2026);
   const [calendarMonth, setCalendarMonth] = useState(0); // 0 = January
   
   // Reservation Modal States
   const [showReservationModal, setShowReservationModal] = useState(false);
+  const [showRegisterGuestModal, setShowRegisterGuestModal] = useState(false);
+  const [showMobileNavMenu, setShowMobileNavMenu] = useState(false);
+  const [registeringGuest, setRegisteringGuest] = useState(false);
+  const [registeredGuestPreview, setRegisteredGuestPreview] = useState(null);
   const [editingReservation, setEditingReservation] = useState(null);
   const [datePickerKey, setDatePickerKey] = useState(0);
   const [cleanersList, setCleanersList] = useState([]);
@@ -54,6 +59,15 @@ const OwnerDashboard = () => {
   const [showReservationDetailsModal, setShowReservationDetailsModal] = useState(false);
   const [selectedReservationDetails, setSelectedReservationDetails] = useState(null);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [showAddPropertyModal, setShowAddPropertyModal] = useState(false);
+  const [addingProperty, setAddingProperty] = useState(false);
+  const [newPropertyForm, setNewPropertyForm] = useState({
+    propertyName: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: ''
+  });
   const [staffForm, setStaffForm] = useState({
     username: '',
     password: '',
@@ -89,6 +103,16 @@ const OwnerDashboard = () => {
       maintenance: false
     });
   };
+
+  const resetPropertyForm = () => {
+    setNewPropertyForm({
+      propertyName: '',
+      address: '',
+      city: '',
+      state: '',
+      zip: ''
+    });
+  };
   const [reservationForm, setReservationForm] = useState({
     confirmationNumber: '',
     customerId: '',
@@ -101,13 +125,21 @@ const OwnerDashboard = () => {
     numberOfGuests: '',
     hasDogs: false
   });
+  const [registerGuestForm, setRegisterGuestForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    confirmationNumber: '',
+    company: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    notes: ''
+  });
   
-  // Mock data for Staff
-  const [staffList, setStaffList] = useState([
-    { id: 1, name: 'John Doe', role: 'Cleaner', email: 'john@strway.com' },
-    { id: 2, name: 'Jane Smith', role: 'Maintenance', email: 'jane@strway.com' },
-    { id: 3, name: 'Mike Ross', role: 'Property Manager', email: 'mike@strway.com' },
-  ]);
+  const [staffList, setStaffList] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showEmployeeDetailsModal, setShowEmployeeDetailsModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -150,21 +182,28 @@ const OwnerDashboard = () => {
   const [reservationFilterMonth, setReservationFilterMonth] = useState(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'));
   
   // State for guest details modal
-  const [selectedGuest, setSelectedGuest] = useState(null);
+  const [selectedGuest, _setSelectedGuest] = useState(null);
   const [showGuestDetailsModal, setShowGuestDetailsModal] = useState(false);
   
   // State for reservation details modal
-  const [selectedReservation, setSelectedReservation] = useState(null);
+  const [_selectedReservation, setSelectedReservation] = useState(null);
   
   // State for event details modal
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
   
   // State to store user map for guest lookup
-  const [propertyUserMap, setPropertyUserMap] = useState({});
+  const [_propertyUserMap, setPropertyUserMap] = useState({});
 
   // NEW: State for events
   const [eventsList, setEventsList] = useState([]);
+
+  // State for reviews
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [editingReview, setEditingReview] = useState(null);
+  const [reviewFormData, setReviewFormData] = useState({ reviewerName: '', reviewText: '', score: '', reviewDate: '' });
 
   // State for notifications/toasts
   const [notification, setNotification] = useState(null);
@@ -477,22 +516,141 @@ const OwnerDashboard = () => {
 
   // Reservation handlers
   const openNewReservationModal = () => {
-    setEditingReservation(null);
-    setReservationForm({
+    setRegisteredGuestPreview(null);
+    setShowRegisterGuestModal(true);
+  };
+
+  const resetRegisterGuestForm = () => {
+    setRegisterGuestForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phoneNumber: '',
       confirmationNumber: '',
-      customerId: '',
-      propertyId: selectedPropertyId || '',
-      checkInDate: '',
-      checkoutDate: '',
-      lockCode: '',
-      staffId: '',
-      cleaningDateTime: ''
+      company: '',
+      address: '',
+      city: '',
+      state: '',
+      zip: '',
+      notes: ''
     });
-    setDatePickerKey(prev => prev + 1);
-    setShowReservationModal(true);
+  };
+
+  const handleRegisterGuestSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      setRegisteringGuest(true);
+      const token = localStorage.getItem('token');
+      const resolvedPropertyId = parseInt(selectedPropertyId || localStorage.getItem('propertyId'), 10);
+
+      if (Number.isNaN(resolvedPropertyId) || resolvedPropertyId <= 0) {
+        showNotification('Select a property before registering a guest.', 'error');
+        return;
+      }
+
+      const normalizedFirstName = registerGuestForm.firstName.trim();
+      const normalizedLastName = registerGuestForm.lastName.trim();
+      const normalizedConfirmation = registerGuestForm.confirmationNumber.trim();
+      const generatedUsername = `${normalizedFirstName || 'guest'}.${normalizedLastName || 'user'}.${Date.now()}`.toLowerCase().replace(/[^a-z0-9.]/g, '');
+      const generatedPassword = `Guest!${Date.now().toString().slice(-6)}`;
+      const fallbackEmail = `${generatedUsername}@guest.local`;
+
+      const registerPayload = {
+        admin: false,
+        cleaner: false,
+        maintenance: false,
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName,
+        email: registerGuestForm.email?.trim() || fallbackEmail,
+        phoneNumber: registerGuestForm.phoneNumber?.trim() || '',
+        confirmationNumber: normalizedConfirmation,
+        company: registerGuestForm.company?.trim() || '',
+        address: registerGuestForm.address?.trim() || '',
+        city: registerGuestForm.city?.trim() || '',
+        state: registerGuestForm.state?.trim() || '',
+        zip: registerGuestForm.zip?.trim() || '',
+        notes: registerGuestForm.notes?.trim() || '',
+        username: generatedUsername,
+        password: generatedPassword,
+        propertyId: resolvedPropertyId
+      };
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL_BASE}/api/register`,
+        registerPayload,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        }
+      );
+
+      const responseData = response?.data;
+      if (responseData?.isSuccess === false) {
+        showNotification(responseData?.message || 'Failed to register guest.', 'error');
+        return;
+      }
+
+      const guestId = parseInt(
+        responseData?.user?.id ||
+        responseData?.id ||
+        responseData?.userId ||
+        responseData?.data?.id ||
+        responseData?.data?.userId,
+        10
+      );
+
+      if (Number.isNaN(guestId) || guestId <= 0) {
+        showNotification('Guest registered but no customer ID returned. Please verify API response.', 'error');
+        return;
+      }
+
+      showNotification('Guest registered successfully!', 'success');
+      setShowRegisterGuestModal(false);
+      resetRegisterGuestForm();
+      setRegisteredGuestPreview({
+        firstName: registerPayload.firstName,
+        lastName: registerPayload.lastName,
+        email: registerPayload.email,
+        phoneNumber: registerPayload.phoneNumber
+      });
+
+      setEditingReservation(null);
+      setReservationForm({
+        confirmationNumber: registerPayload.confirmationNumber || '',
+        customerId: guestId.toString(),
+        propertyId: resolvedPropertyId,
+        checkInDate: '',
+        checkoutDate: '',
+        lockCode: '',
+        staffId: '',
+        cleaningDateTime: '',
+        numberOfGuests: '',
+        hasDogs: false
+      });
+      setDatePickerKey(prev => prev + 1);
+      setShowReservationModal(true);
+    } catch (error) {
+      console.error('Error registering guest:', error);
+      const responseData = error.response?.data;
+      console.error('Register guest error response:', responseData);
+
+      const validationMessage =
+        responseData?.message ||
+        responseData?.title ||
+        (Array.isArray(responseData?.errors)
+          ? responseData.errors.join(', ')
+          : responseData?.errors && typeof responseData.errors === 'object'
+            ? Object.values(responseData.errors).flat().join(', ')
+            : null);
+
+      showNotification(validationMessage || 'Failed to register guest.', 'error');
+    } finally {
+      setRegisteringGuest(false);
+    }
   };
 
   const openEditReservationModal = (reservation) => {
+    setRegisteredGuestPreview(null);
     setEditingReservation(reservation);
     setReservationForm({
       confirmationNumber: reservation.confirmationNumber?.toString() || '',
@@ -512,6 +670,7 @@ const OwnerDashboard = () => {
     setShowReservationModal(false);
     setEditingReservation(null);
     setReservationErrors({});
+    setRegisteredGuestPreview(null);
   };
 
   const handleSaveReservation = async () => {
@@ -534,19 +693,44 @@ const OwnerDashboard = () => {
 
     try {
       const token = localStorage.getItem('token');
+      const resolvedPropertyId = parseInt(reservationForm.propertyId || selectedPropertyId || localStorage.getItem('propertyId'), 10);
+      const resolvedCustomerId = parseInt(reservationForm.customerId, 10);
+      const resolvedStaffId = parseInt(reservationForm.staffId, 10);
+
+      if (!token) {
+        showNotification('You are not authenticated. Please log in again.', 'error');
+        return;
+      }
+
+      if (Number.isNaN(resolvedPropertyId) || resolvedPropertyId <= 0) {
+        showNotification('Select a valid property before creating reservation.', 'error');
+        return;
+      }
+
+      if (Number.isNaN(resolvedCustomerId) || resolvedCustomerId <= 0) {
+        showNotification('Customer ID must be a valid number.', 'error');
+        return;
+      }
+
+      if (Number.isNaN(resolvedStaffId) || resolvedStaffId <= 0) {
+        showNotification('Cleaner must be a valid staff member.', 'error');
+        return;
+      }
+
+      const normalizedCleaningDateTime = reservationForm.cleaningDateTime?.toString().trim() || reservationForm.checkInDate;
       
       if (editingReservation) {
         // Update reservation
         const updateData = {
           id: editingReservation.id,
           confirmationNumber: reservationForm.confirmationNumber,
-          customerId: reservationForm.customerId,
-          propertyId: reservationForm.propertyId || selectedPropertyId,
+          customerId: resolvedCustomerId,
+          propertyId: resolvedPropertyId,
           checkInDate: reservationForm.checkInDate,
           checkoutDate: reservationForm.checkoutDate,
           lockCode: reservationForm.lockCode,
-          staffId: reservationForm.staffId,
-          cleaningDateTime: reservationForm.cleaningDateTime|| null,
+          staffId: resolvedStaffId,
+          cleaningDateTime: normalizedCleaningDateTime,
           guestCount: reservationForm.numberOfGuests,
           dogs: reservationForm.hasDogs
         };
@@ -576,16 +760,16 @@ const OwnerDashboard = () => {
       } else {
         // Create new reservation
         const createData = {
-          confirmationNumber: reservationForm.confirmationNumber,
-          customerId: reservationForm.customerId,
-          propertyId: reservationForm.propertyId || selectedPropertyId,
+          confirmationNumber: reservationForm.confirmationNumber?.toString().trim(),
+          customerId: resolvedCustomerId,
+          propertyId: resolvedPropertyId,
+          staffId: resolvedStaffId,
           checkInDate: reservationForm.checkInDate,
           checkoutDate: reservationForm.checkoutDate,
-          lockCode: reservationForm.lockCode,
-          staffId: reservationForm.staffId,
-          cleaningDateTime: null,
-          guestCount: reservationForm.numberOfGuests,
-          dogs: reservationForm.hasDogs
+          lockCode: reservationForm.lockCode?.toString().trim(),
+          cleaningDateTime: normalizedCleaningDateTime,
+          guestCount: parseInt(reservationForm.numberOfGuests, 10) || 0,
+          dogs: reservationForm.hasDogs === true || reservationForm.hasDogs === 'yes'
         };
         const response = await createReservation({ token, reservationData: createData });
         
@@ -594,9 +778,10 @@ const OwnerDashboard = () => {
           return;
         }
         
+        const createdGuestName = `${registeredGuestPreview?.firstName || ''} ${registeredGuestPreview?.lastName || ''}`.trim();
         setReservationsList([...reservationsList, {
           id: response?.id || Math.max(...reservationsList.map(r => r.id), 0) + 1,
-          guest: reservationForm.customerId,
+          guest: createdGuestName || reservationForm.customerId,
           property: selectedPropertyDetails?.propertyName || 'Property',
           checkIn: reservationForm.checkInDate,
           checkOut: reservationForm.checkoutDate,
@@ -611,7 +796,6 @@ const OwnerDashboard = () => {
         
         // Create a cleaning calendar event if cleaningDateTime is provided
         if (reservationForm.cleaningDateTime) {
-          const cleaningDate = reservationForm.cleaningDateTime.split('T')[0];
           await createInvoiceEvent(
             token,
             'Cleaning',
@@ -628,7 +812,11 @@ const OwnerDashboard = () => {
       closeReservationModal();
     } catch (error) {
       console.error('Error saving reservation:', error);
-      showNotification('Error saving reservation: ' + (error.message || 'Unknown error'), 'error');
+      if (error?.code === 'ERR_NETWORK') {
+        showNotification('Network error while saving reservation. Verify API URL/CORS and try again.', 'error');
+      } else {
+        showNotification('Error saving reservation: ' + (error.response?.data?.message || error.message || 'Unknown error'), 'error');
+      }
     }
   };
 
@@ -660,6 +848,331 @@ const OwnerDashboard = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     navigate('/');
+  };
+
+  const loadOwnerProperties = useCallback(async () => {
+    setLoadingProperties(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setPropertiesList([]);
+        return;
+      }
+
+      const decoded = jwtDecode(token);
+      const directCandidates = [
+        decoded?.OwnerId,
+        decoded?.ownerId,
+        decoded?.UserId,
+        decoded?.userId,
+        decoded?.userID,
+        decoded?.Id,
+        decoded?.id,
+        decoded?.sub,
+        decoded?.nameid,
+        decoded?.nameidentifier
+      ];
+
+      let ownerId = null;
+      for (const candidate of directCandidates) {
+        const parsed = parseInt(candidate, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          ownerId = parsed;
+          break;
+        }
+      }
+
+      if (!ownerId && decoded && typeof decoded === 'object') {
+        const tokenEntries = Object.entries(decoded);
+        const fallbackEntry = tokenEntries.find(([key]) => {
+          const normalizedKey = key.toLowerCase();
+          return normalizedKey === 'ownerid' || normalizedKey === 'userid' || normalizedKey.endsWith('/nameidentifier');
+        });
+
+        if (fallbackEntry) {
+          const parsed = parseInt(fallbackEntry[1], 10);
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            ownerId = parsed;
+          }
+        }
+      }
+
+      if (!ownerId) {
+        ownerId = parseInt(localStorage.getItem('ownerId') || localStorage.getItem('userId'), 10);
+      }
+
+      if (!ownerId) {
+        console.warn('No owner ID found; skipping owner/property fetch.');
+        setPropertiesList([]);
+        return;
+      }
+
+      console.log('Calling /api/User with owner id:', ownerId);
+      const userResponse = await getUserById({ token, id: ownerId });
+      if (userResponse?.isSuccess === false) {
+        console.warn('/api/User returned unsuccessful response:', userResponse);
+        setPropertiesList([]);
+        return;
+      }
+
+      const ownerUser = userResponse?.user;
+      const rawPropertyValues = [
+        ownerUser?.propertyId,
+        ownerUser?.propertyIds,
+        userResponse?.propertyId,
+        userResponse?.propertyIds,
+        ...(Array.isArray(ownerUser) ? ownerUser.map(user => user?.propertyId) : [])
+      ];
+
+      const propertyIds = rawPropertyValues
+        .flatMap((value) => {
+          if (Array.isArray(value)) return value;
+          if (typeof value === 'string' && value.includes(',')) {
+            return value.split(',').map(item => item.trim());
+          }
+          return [value];
+        })
+        .map(value => parseInt(value, 10))
+        .filter(value => !Number.isNaN(value) && value > 0)
+        .filter((value, index, list) => list.indexOf(value) === index);
+
+      if (propertyIds.length === 0) {
+        console.warn('No property IDs found on /api/User response:', userResponse);
+        setPropertiesList([]);
+        return;
+      }
+
+      console.log('Calling /api/getPropertyById for propertyIds:', propertyIds);
+      const propertyResults = await Promise.allSettled(
+        propertyIds.map(propertyId => getPropertyById({ token, propertyId }))
+      );
+
+      const properties = propertyResults
+        .map((result, index) => {
+          if (result.status !== 'fulfilled' || !result.value) return null;
+          return {
+            ...result.value,
+            id: propertyIds[index]
+          };
+        })
+        .filter(Boolean);
+
+      setPropertiesList(properties);
+
+      if (propertyIds.length > 0) {
+        localStorage.setItem('propertyIds', JSON.stringify(propertyIds));
+        localStorage.setItem('propertyId', propertyIds[0].toString());
+      }
+    } catch (error) {
+      console.error('Failed to fetch properties:', error);
+      setPropertiesList([]);
+    } finally {
+      setLoadingProperties(false);
+    }
+  }, []);
+
+  const getOwnerIdFromToken = (decodedToken) => {
+    if (!decodedToken || typeof decodedToken !== 'object') return null;
+
+    const directCandidates = [
+      decodedToken.OwnerId,
+      decodedToken.ownerId,
+      decodedToken.UserId,
+      decodedToken.userId,
+      decodedToken.userID,
+      decodedToken.Id,
+      decodedToken.id,
+      decodedToken.sub,
+      decodedToken.nameid,
+      decodedToken.nameidentifier
+    ];
+
+    for (const candidate of directCandidates) {
+      const parsed = parseInt(candidate, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    const tokenEntries = Object.entries(decodedToken);
+
+    const explicitOwnerIdEntry = tokenEntries.find(([key]) => {
+      const normalizedKey = key.toLowerCase();
+      return normalizedKey === 'ownerid' || normalizedKey === 'userid' || normalizedKey.endsWith('/nameidentifier');
+    });
+
+    if (explicitOwnerIdEntry) {
+      const parsed = parseInt(explicitOwnerIdEntry[1], 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    const fallbackEntry = tokenEntries.find(([key]) => {
+      const normalizedKey = key.toLowerCase();
+      return normalizedKey.includes('ownerid') || normalizedKey.includes('userid') || normalizedKey.includes('nameidentifier') || normalizedKey.endsWith('/sub') || normalizedKey === 'sub';
+    });
+
+    if (fallbackEntry) {
+      const parsed = parseInt(fallbackEntry[1], 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
+  const getOwnerIdFromPropertyData = () => {
+    const ownerCandidates = [
+      selectedPropertyDetails?.owner?.id,
+      selectedPropertyDetails?.owner?.userId,
+      selectedPropertyDetails?.owner?.ownerId,
+      selectedPropertyDetails?.ownerId,
+      propertiesList?.[0]?.owner?.id,
+      propertiesList?.[0]?.owner?.userId,
+      propertiesList?.[0]?.owner?.ownerId,
+      propertiesList?.[0]?.ownerId
+    ];
+
+    for (const candidate of ownerCandidates) {
+      const parsed = parseInt(candidate, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
+  const resolveOwnerId = async (token) => {
+    const decodedToken = jwtDecode(token);
+    const tokenUsername = String(
+      decodedToken?.sub ||
+      decodedToken?.username ||
+      decodedToken?.unique_name ||
+      decodedToken?.name ||
+      ''
+    ).trim().toLowerCase();
+
+    const ownerIdFromToken = getOwnerIdFromToken(decodedToken);
+    if (ownerIdFromToken) {
+      localStorage.setItem('ownerId', ownerIdFromToken.toString());
+      return ownerIdFromToken;
+    }
+
+    const ownerIdFromStorage = parseInt(localStorage.getItem('ownerId') || localStorage.getItem('userId'), 10);
+    if (!Number.isNaN(ownerIdFromStorage) && ownerIdFromStorage > 0) {
+      return ownerIdFromStorage;
+    }
+
+    const ownerIdFromPropertyData = getOwnerIdFromPropertyData();
+    if (ownerIdFromPropertyData) {
+      localStorage.setItem('ownerId', ownerIdFromPropertyData.toString());
+      return ownerIdFromPropertyData;
+    }
+
+    const storedPropertyIdsRaw = localStorage.getItem('propertyIds');
+    let storedPropertyIds = [];
+    if (storedPropertyIdsRaw) {
+      try {
+        const parsed = JSON.parse(storedPropertyIdsRaw);
+        if (Array.isArray(parsed)) {
+          storedPropertyIds = parsed;
+        }
+      } catch (error) {
+        console.warn('Unable to parse propertyIds from localStorage:', error);
+      }
+    }
+
+    const safePropertiesList = Array.isArray(propertiesList) ? propertiesList : [];
+
+    const propertyIdsToCheck = [
+      selectedPropertyId,
+      localStorage.getItem('propertyId'),
+      decodedToken?.PropertyId,
+      decodedToken?.propertyId,
+      ...storedPropertyIds,
+      ...safePropertiesList.map(property => property?.id || property?.propertyId)
+    ]
+      .map(value => parseInt(value, 10))
+      .filter(value => !Number.isNaN(value) && value > 0)
+      .filter((value, index, list) => list.indexOf(value) === index);
+
+    for (const propertyId of propertyIdsToCheck) {
+      try {
+        const users = await getUsersByPropertyId({ token, propertyId });
+        if (!Array.isArray(users) || users.length === 0) {
+          continue;
+        }
+
+        const ownerByUsername = tokenUsername
+          ? users.find(user => {
+              const userName = String(user?.username || user?.userName || '').trim().toLowerCase();
+              return userName && userName === tokenUsername;
+            })
+          : null;
+
+        const ownerByAccess = users.find(user => parseInt(user?.access, 10) === 1);
+        const ownerCandidate = ownerByUsername || ownerByAccess;
+
+        const ownerIdFromUsers = parseInt(ownerCandidate?.id || ownerCandidate?.userId, 10);
+        if (!Number.isNaN(ownerIdFromUsers) && ownerIdFromUsers > 0) {
+          localStorage.setItem('ownerId', ownerIdFromUsers.toString());
+          localStorage.setItem('userId', ownerIdFromUsers.toString());
+          return ownerIdFromUsers;
+        }
+      } catch (error) {
+        console.error(`Failed to resolve owner ID for property ${propertyId}:`, error);
+      }
+    }
+
+    return null;
+  };
+
+  const handleAddPropertySubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      setAddingProperty(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        showNotification('You are not authenticated. Please log in again.', 'error');
+        return;
+      }
+
+      const ownerId = await resolveOwnerId(token);
+      if (!ownerId) {
+        showNotification('Unable to determine owner ID. Please re-login and try again.', 'error');
+        return;
+      }
+
+      const propertyData = {
+        propertyId: 0,
+        propertyName: newPropertyForm.propertyName.trim(),
+        address: newPropertyForm.address.trim(),
+        city: newPropertyForm.city.trim(),
+        state: newPropertyForm.state.trim(),
+        zip: newPropertyForm.zip.trim(),
+        ownerId
+      };
+
+      const response = await createProperty({ token, propertyData });
+      if (response?.isSuccess === false) {
+        showNotification(response.message || 'Failed to create property.', 'error');
+        return;
+      }
+
+      showNotification('Property added successfully!', 'success');
+      setShowAddPropertyModal(false);
+      resetPropertyForm();
+      await loadOwnerProperties();
+    } catch (error) {
+      console.error('Error creating property:', error);
+      showNotification(error.response?.data?.message || 'Failed to create property.', 'error');
+    } finally {
+      setAddingProperty(false);
+    }
   };
 
   // Function to get first and last day of current month
@@ -698,28 +1211,44 @@ const OwnerDashboard = () => {
         setLoadingExpenses(true);
         try {
           const token = localStorage.getItem('token');
-          const { firstDay, lastDay } = getMonthDateRange();
-          
-          const attributes = {
-            startDate: firstDay,
-            endDate: lastDay,
-            propertyId: selectedPropertyId
-          };
+          if (!token) return;
 
-          const data = await getExpenses({ token, attributes });
-          setExpensesData(data || []);
-          setCurrentFilters({ dateFrom: firstDay, dateTo: lastDay });
+          // Decode JWT to get property IDs
+          const decoded = jwtDecode(token);
+          const propertyIds = decoded['PropertyId']; // Adjust this key based on your JWT structure
+
+          if (propertyIds && Array.isArray(propertyIds)) {
+            // Fetch each property - convert string IDs to integers and preserve the ID
+            const properties = await Promise.all(
+              propertyIds.map(async (id) => {
+                const property = await getPropertyById({ token, propertyId: parseInt(id, 10) });
+                return {
+                  ...property,
+                  id: parseInt(id, 10) // Store the original ID that came from JWT
+                };
+              })
+            );
+            setPropertiesList(properties);
+          } else if (propertyIds && typeof propertyIds === 'string') {
+            // If single property ID - convert to integer
+            const propertyId = parseInt(propertyIds, 10);
+            const property = await getPropertyById({ token, propertyId });
+            setPropertiesList([{
+              ...property,
+              id: propertyId
+            }]);
+          }
         } catch (error) {
-          console.error('Failed to fetch expenses:', error);
-          setExpensesData([]);
+          console.error('Failed to fetch properties:', error);
+          setPropertiesList([]);
         } finally {
-          setLoadingExpenses(false);
+          setLoadingProperties(false);
         }
       };
 
       fetchExpenses();
     }
-  }, [activeView, selectedPropertyId]);
+  }, [activeView, selectedPropertyId, selectedPropertyDetails?.propertyName]);
 
   // Fetch dashboard data when selectedPropertyId changes or activeView is dashboard
   useEffect(() => {
@@ -823,51 +1352,19 @@ const OwnerDashboard = () => {
       };
       fetchDashboardData();
     }
-  }, [activeView, selectedPropertyId]);
+  }, [activeView, selectedPropertyId, selectedPropertyDetails?.propertyName]);
 
   // Fetch properties on component mount
   useEffect(() => {
-    const fetchProperties = async () => {
-      setLoadingProperties(true);
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
+    loadOwnerProperties();
+  }, [loadOwnerProperties]);
 
-        // Decode JWT to get property IDs
-        const decoded = jwtDecode(token);
-        const propertyIds = decoded['PropertyId']; // Adjust this key based on your JWT structure
-
-        if (propertyIds && Array.isArray(propertyIds)) {
-          // Fetch each property - convert string IDs to integers and preserve the ID
-          const properties = await Promise.all(
-            propertyIds.map(async (id) => {
-              const property = await getPropertyById({ token, propertyId: parseInt(id, 10) });
-              return {
-                ...property,
-                id: parseInt(id, 10) // Store the original ID that came from JWT
-              };
-            })
-          );
-          setPropertiesList(properties);
-        } else if (propertyIds && typeof propertyIds === 'string') {
-          // If single property ID - convert to integer
-          const propertyId = parseInt(propertyIds, 10);
-          const property = await getPropertyById({ token, propertyId });
-          setPropertiesList([{
-            ...property,
-            id: propertyId
-          }]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch properties:', error);
-        setPropertiesList([]);
-      } finally {
-        setLoadingProperties(false);
-      }
-    };
-
-    fetchProperties();
-  }, []);
+  // Re-fetch properties whenever owner lands on properties view
+  useEffect(() => {
+    if (activeView === 'properties') {
+      loadOwnerProperties();
+    }
+  }, [activeView, loadOwnerProperties]);
 
   // Fetch cleaners when modal opens and property is selected
   useEffect(() => {
@@ -945,7 +1442,6 @@ const OwnerDashboard = () => {
             if (reservationResponse.reservations && Array.isArray(reservationResponse.reservations)) {
               reservationsArray = reservationResponse.reservations;
             } else if (Array.isArray(reservationResponse)) {
-              // Handle direct array response
               reservationsArray = reservationResponse;
             }
           }
@@ -1097,6 +1593,36 @@ const OwnerDashboard = () => {
       fetchInvoices();
     }
   }, [selectedPropertyId]);
+
+  // Fetch reviews when activeView changes to 'reviews'
+  useEffect(() => {
+    if (activeView === 'reviews' && selectedPropertyId) {
+      const fetchReviews = async () => {
+        try {
+          setLoadingReviews(true);
+          const token = localStorage.getItem('token');
+          const reviewsData = await getReviewsByPropertyId({ token, propertyId: selectedPropertyId });
+          console.log('Reviews API Response:', reviewsData);
+          // Handle the response structure with isSuccess and reviews array
+          let reviewsArray = [];
+          if (reviewsData?.reviews && Array.isArray(reviewsData.reviews)) {
+            reviewsArray = reviewsData.reviews;
+          } else if (Array.isArray(reviewsData)) {
+            reviewsArray = reviewsData;
+          }
+          console.log('Final reviews array:', reviewsArray);
+          setReviews(reviewsArray);
+        } catch (error) {
+          console.error('Error fetching reviews:', error);
+          setReviews([]);
+          showNotification('Failed to fetch reviews', 'error');
+        } finally {
+          setLoadingReviews(false);
+        }
+      };
+      fetchReviews();
+    }
+  }, [activeView, selectedPropertyId]);
 
   // Helper function to get staff info by ID
   const getStaffInfoById = (staffId) => {
@@ -1393,6 +1919,92 @@ const OwnerDashboard = () => {
     }
   };
 
+  // Review handlers
+  const handleAddReview = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (editingReview) {
+        // Update existing review
+        const updatedReviewData = {
+          id: editingReview.id,
+          reviewerName: reviewFormData.reviewerName,
+          reviewText: reviewFormData.reviewText,
+          score: reviewFormData.score,
+          reviewDate: reviewFormData.reviewDate
+        };
+        
+        await updateReview({ token, reviewData: updatedReviewData });
+        showNotification('Review updated successfully', 'success');
+      } else {
+        // Create new review
+        const newReviewData = {
+          reviewerName: reviewFormData.reviewerName,
+          reviewText: reviewFormData.reviewText,
+          propertyId: selectedPropertyId,
+          score: reviewFormData.score,
+          reviewDate: reviewFormData.reviewDate
+        };
+        
+        await createReview({ token, reviewData: newReviewData });
+        showNotification('Review added successfully', 'success');
+      }
+      
+      // Refresh reviews list
+      const reviewsData = await getReviewsByPropertyId({ token, propertyId: selectedPropertyId });
+      console.log('Refreshed reviews data:', reviewsData);
+      // Handle the response structure with isSuccess and reviews array
+      let reviewsArray = [];
+      if (reviewsData?.reviews && Array.isArray(reviewsData.reviews)) {
+        reviewsArray = reviewsData.reviews;
+      } else if (Array.isArray(reviewsData)) {
+        reviewsArray = reviewsData;
+      }
+      console.log('Final refreshed reviews array:', reviewsArray);
+      setReviews(reviewsArray);
+      
+      // Reset form
+      setReviewFormData({ reviewerName: '', reviewText: '', score: '', reviewDate: '' });
+      setShowReviewForm(false);
+      setEditingReview(null);
+    } catch (error) {
+      console.error('Error saving review:', error);
+      showNotification('Failed to save review', 'error');
+    }
+  };
+
+  const handleEditReview = (review) => {
+    setEditingReview(review);
+    setReviewFormData({
+      reviewerName: review.reviewerName || '',
+      reviewText: review.reviewText || '',
+      score: review.score || '',
+      reviewDate: review.reviewDate || ''
+    });
+    setShowReviewForm(true);
+  };
+
+  const handleDeleteReview = async (reviewId) => {
+    showConfirmation(
+      'Delete Review',
+      'Are you sure you want to delete this review?',
+      async () => {
+        try {
+          const token = localStorage.getItem('token');
+          await deleteReview({ token, reviewId });
+          showNotification('Review deleted successfully', 'success');
+          
+          // Refresh reviews list
+          const reviewsData = await getReviewsByPropertyId({ token, propertyId: selectedPropertyId });
+          setReviews(Array.isArray(reviewsData) ? reviewsData : []);
+        } catch (error) {
+          console.error('Error deleting review:', error);
+          showNotification('Failed to delete review', 'error');
+        }
+      }
+    );
+  };
+
   const portalRootRef = useRef(null);
 
   // Setup portal root on mount
@@ -1472,8 +2084,8 @@ const OwnerDashboard = () => {
       )}
       
       {showAddStaffModal && portalRootRef.current && createPortal(
-        <div onClick={(e) => {if (e.target === e.currentTarget) {resetStaffForm(); setShowAddStaffModal(false);}}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto">
-          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full mx-4 my-8 overflow-hidden">
+        <div onClick={(e) => {if (e.target === e.currentTarget) {resetStaffForm(); setShowAddStaffModal(false);}}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
               <div className="flex justify-between items-center">
@@ -1482,7 +2094,7 @@ const OwnerDashboard = () => {
             </div>
             
             {/* Content */}
-            <form onSubmit={handleAddStaffSubmit} className="p-8 space-y-6">
+            <form onSubmit={handleAddStaffSubmit} className="p-8 space-y-6 overflow-y-auto overscroll-contain">
               {/* Row 1: Username and Password */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
@@ -1511,7 +2123,7 @@ const OwnerDashboard = () => {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-2">Email</label>
-                  <input type="email" value={staffForm.email} onChange={(e) => setStaffForm({...staffForm, email: e.target.value})} required className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400" />
+                  <input type="email" value={staffForm.email} onChange={(e) => setStaffForm({...staffForm, email: e.target.value})}  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400" />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-2">Phone Number</label>
@@ -1590,14 +2202,181 @@ const OwnerDashboard = () => {
         portalRootRef.current
       )}
 
+      {showAddPropertyModal && portalRootRef.current && createPortal(
+        <div onClick={(e) => {if (e.target === e.currentTarget) {resetPropertyForm(); setShowAddPropertyModal(false);}}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
+              <h2 className="text-2xl font-black text-white">Add Property</h2>
+            </div>
+
+            <form onSubmit={handleAddPropertySubmit} className="p-8 space-y-6 overflow-y-auto overscroll-contain">
+              <div>
+                <label className="block text-sm font-bold text-slate-900 mb-2">Property Name</label>
+                <input
+                  type="text"
+                  value={newPropertyForm.propertyName}
+                  onChange={(e) => setNewPropertyForm({ ...newPropertyForm, propertyName: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Property name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-900 mb-2">Address</label>
+                <input
+                  type="text"
+                  value={newPropertyForm.address}
+                  onChange={(e) => setNewPropertyForm({ ...newPropertyForm, address: e.target.value })}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Street address"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">City</label>
+                  <input
+                    type="text"
+                    value={newPropertyForm.city}
+                    onChange={(e) => setNewPropertyForm({ ...newPropertyForm, city: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="City"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">State</label>
+                  <input
+                    type="text"
+                    value={newPropertyForm.state}
+                    onChange={(e) => setNewPropertyForm({ ...newPropertyForm, state: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="State"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">ZIP</label>
+                  <input
+                    type="text"
+                    value={newPropertyForm.zip}
+                    onChange={(e) => setNewPropertyForm({ ...newPropertyForm, zip: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="ZIP"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-6 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => { resetPropertyForm(); setShowAddPropertyModal(false); }}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors"
+                  disabled={addingProperty}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
+                  disabled={addingProperty}
+                >
+                  {addingProperty ? 'Adding...' : 'Add Property'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        portalRootRef.current
+      )}
+
+      {showRegisterGuestModal && portalRootRef.current && createPortal(
+        <div onClick={(e) => {if (e.target === e.currentTarget) {resetRegisterGuestForm(); setShowRegisterGuestModal(false);}}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
+              <h2 className="text-2xl font-black text-white">Register Guest</h2>
+            </div>
+
+            <form onSubmit={handleRegisterGuestSubmit} className="p-8 space-y-6 overflow-y-auto overscroll-contain">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">First Name</label>
+                  <input type="text" value={registerGuestForm.firstName} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, firstName: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">Last Name</label>
+                  <input type="text" value={registerGuestForm.lastName} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, lastName: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">Email</label>
+                  <input type="email" value={registerGuestForm.email} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, email: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">Phone Number</label>
+                  <input type="tel" value={registerGuestForm.phoneNumber} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, phoneNumber: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-900 mb-2">Confirmation Number</label>
+                <input type="text" value={registerGuestForm.confirmationNumber} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, confirmationNumber: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">Company</label>
+                  <input type="text" value={registerGuestForm.company} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, company: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">Address</label>
+                  <input type="text" value={registerGuestForm.address} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, address: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">City</label>
+                  <input type="text" value={registerGuestForm.city} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, city: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">State</label>
+                  <input type="text" value={registerGuestForm.state} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, state: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 mb-2">ZIP</label>
+                  <input type="text" value={registerGuestForm.zip} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, zip: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-900 mb-2">Notes</label>
+                <textarea value={registerGuestForm.notes} onChange={(e) => setRegisterGuestForm({ ...registerGuestForm, notes: e.target.value })} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-900 min-h-24 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div className="flex gap-4 pt-6 border-t border-slate-200">
+                <button type="button" onClick={() => {resetRegisterGuestForm(); setShowRegisterGuestModal(false);}} className="flex-1 px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors" disabled={registeringGuest}>Cancel</button>
+                <button type="submit" className="flex-1 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={registeringGuest}>{registeringGuest ? 'Registering...' : 'Register Guest'}</button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        portalRootRef.current
+      )}
+
       {/* EDIT STAFF MODAL */}
       {showEditStaffModal && editingEmployee && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl my-8">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6 rounded-t-3xl">
               <h2 className="text-2xl font-black text-white">Edit Staff Member</h2>
             </div>
-            <form onSubmit={handleUpdateStaffSubmit} className="p-8">
+            <form onSubmit={handleUpdateStaffSubmit} className="p-8 overflow-y-auto overscroll-contain">
               {/* Row 1: First Name & Last Name */}
               <div className="grid grid-cols-2 gap-6 mb-6">
                 <div>
@@ -1815,6 +2594,14 @@ const OwnerDashboard = () => {
             onClick={() => setActiveView('maintenance')}
             disabled={!selectedPropertyId}
           />
+          {/* REVIEWS MENU ITEM */}
+          <NavItem 
+            icon={<Star size={20} />} 
+            label="Reviews" 
+            active={activeView === 'reviews'}
+            onClick={() => setActiveView('reviews')}
+            disabled={!selectedPropertyId}
+          />
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -1824,8 +2611,95 @@ const OwnerDashboard = () => {
         </div>
       </aside>
 
+      {/* MOBILE NAV */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-900 text-white border-b border-slate-800">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="font-black text-xl tracking-tighter italic text-blue-400">STRway</div>
+          <button
+            onClick={() => setShowMobileNavMenu(!showMobileNavMenu)}
+            className="px-3 py-2 rounded-lg bg-slate-800 text-sm font-semibold"
+          >
+            {showMobileNavMenu ? 'Close' : 'Menu'}
+          </button>
+        </div>
+        {showMobileNavMenu && (
+        <div className="px-3 pb-3 overflow-x-auto bg-slate-900 border-t border-slate-800">
+          <div className="flex gap-2 min-w-max pt-3">
+            <button
+              onClick={() => { setActiveView('properties'); setShowMobileNavMenu(false); }}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'properties' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+            >
+              Properties
+            </button>
+            <button
+              onClick={() => { setActiveView('dashboard'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => { setActiveView('reservations'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'reservations' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Reservations
+            </button>
+            <button
+              onClick={() => { setActiveView('calendar'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'calendar' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Calendar
+            </button>
+            <button
+              onClick={() => { setActiveView('expenses'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'expenses' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Expenses
+            </button>
+            <button
+              onClick={() => { setActiveView('mileage'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'mileage' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Mileage
+            </button>
+            <button
+              onClick={() => { setActiveView('staff'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'staff' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Staff
+            </button>
+            <button
+              onClick={() => { setActiveView('maintenance'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'maintenance' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Maintenance
+            </button>
+            <button
+              onClick={() => { setActiveView('reviews'); setShowMobileNavMenu(false); }}
+              disabled={!selectedPropertyId}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold transition-all ${activeView === 'reviews' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'} ${!selectedPropertyId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Reviews
+            </button>
+            <button
+              onClick={() => { setShowMobileNavMenu(false); handleLogout(); }}
+              className="px-3 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-800 text-pink-300"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+        )}
+      </div>
+
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto mt-28 md:mt-0">
         
         {/* VIEW: DASHBOARD */}
         {activeView === 'dashboard' && (
@@ -1835,7 +2709,7 @@ const OwnerDashboard = () => {
                 <h1 className="text-3xl font-black text-gray-900">Owner Overview</h1>
                 <p className="text-gray-500">{selectedPropertyDetails?.propertyName ? `${selectedPropertyDetails.propertyName} - here is what's happening today.` : 'Welcome back, here is what\'s happening today.'}</p>
               </div>
-              <button className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all">
+              <button onClick={() => setShowAddPropertyModal(true)} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all">
                 + Add Property
               </button>
             </header>
@@ -1918,15 +2792,15 @@ const OwnerDashboard = () => {
 
             {/* EVENT DETAILS MODAL */}
             {showEventDetailsModal && selectedEvent && (
-              <div onClick={(e) => {if (e.target === e.currentTarget) setShowEventDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto" style={{display: 'flex'}}>
-                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full mx-4 my-8 overflow-hidden">
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowEventDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4" style={{display: 'flex'}}>
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                   {/* Header */}
                   <div className="bg-gradient-to-r from-green-600 to-green-700 px-8 py-6">
                     <h2 className="text-2xl font-black text-white">Event Details</h2>
                   </div>
                   
                   {/* Content */}
-                  <div className="p-8 space-y-6">
+                  <div className="p-8 space-y-6 overflow-y-auto overscroll-contain">
                     <div>
                       <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Event Name</p>
                       <p className="text-2xl font-black text-gray-900 mt-2">{selectedEvent.eventName}</p>
@@ -1972,12 +2846,12 @@ const OwnerDashboard = () => {
         {/* VIEW: PROPERTIES */}
         {activeView === 'properties' && (
           <div className="animate-in fade-in duration-500">
-            <header className="flex justify-between items-center mb-10">
+            <header className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-10">
               <div>
                 <h1 className="text-3xl font-black text-gray-900">My Properties</h1>
                 <p className="text-gray-500">View and manage your rental properties.</p>
               </div>
-              <button className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center gap-2">
+              <button onClick={() => setShowAddPropertyModal(true)} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2">
                 <Plus size={20} /> Add Property
               </button>
             </header>
@@ -1987,45 +2861,73 @@ const OwnerDashboard = () => {
                 <p className="text-gray-500">Loading properties...</p>
               </div>
             ) : propertiesList.length > 0 ? (
-              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Property Name</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Address</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">City, State</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {propertiesList.map((property) => (
-                      <tr key={property.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="p-6 font-bold text-gray-900">{property.propertyName || 'Unnamed Property'}</td>
-                        <td className="p-6 text-sm text-gray-500">{property.address || 'N/A'}</td>
-                        <td className="p-6 text-sm text-gray-500">{property.city ? `${property.city}, ${property.state}` : 'N/A'}</td>
-                        <td className="p-6">
-                          <div className="flex justify-center gap-3">
-                            <button 
-                              type="button"
-                              onClick={() => handleSelectProperty(property)}
-                              className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${selectedPropertyId === property.id ? 'bg-blue-600 text-white' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
-                            >
-                              Select
-                            </button>
-                            <button 
-                              type="button"
-                              onClick={() => handleViewOwner(property.owner)}
-                              className="px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all"
-                            >
-                              Owner
-                            </button>
-                          </div>
-                        </td>
+              <>
+                <div className="md:hidden space-y-4">
+                  {propertiesList.map((property) => (
+                    <div key={property.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                      <p className="font-bold text-gray-900 text-lg mb-2">{property.propertyName || 'Unnamed Property'}</p>
+                      <p className="text-sm text-gray-600">{property.address || 'N/A'}</p>
+                      <p className="text-sm text-gray-600 mb-4">{property.city ? `${property.city}, ${property.state}` : 'N/A'}</p>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectProperty(property)}
+                          className={`flex-1 px-4 py-2 text-sm font-semibold rounded-xl transition-all ${selectedPropertyId === property.id ? 'bg-blue-600 text-white' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                        >
+                          Select
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleViewOwner(property.owner)}
+                          className="flex-1 px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all"
+                        >
+                          Owner
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Property Name</th>
+                        <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Address</th>
+                        <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">City, State</th>
+                        <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {propertiesList.map((property) => (
+                        <tr key={property.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="p-6 font-bold text-gray-900">{property.propertyName || 'Unnamed Property'}</td>
+                          <td className="p-6 text-sm text-gray-500">{property.address || 'N/A'}</td>
+                          <td className="p-6 text-sm text-gray-500">{property.city ? `${property.city}, ${property.state}` : 'N/A'}</td>
+                          <td className="p-6">
+                            <div className="flex justify-center gap-3">
+                              <button 
+                                type="button"
+                                onClick={() => handleSelectProperty(property)}
+                                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${selectedPropertyId === property.id ? 'bg-blue-600 text-white' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                              >
+                                Select
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => handleViewOwner(property.owner)}
+                                className="px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all"
+                              >
+                                Owner
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <div className="bg-white p-12 rounded-3xl shadow-sm border border-gray-100 text-center">
                 <p className="text-gray-500">No properties found. Add your first property to get started.</p>
@@ -2078,7 +2980,7 @@ const OwnerDashboard = () => {
                 <tbody className="divide-y divide-gray-50">
                   {staffList.map((member) => (
                     <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="p-6 font-bold text-gray-900 cursor-pointer text-blue-600 hover:underline" onClick={() => { setSelectedEmployee(member); setShowEmployeeDetailsModal(true); }}>{member.name}</td>
+                      <td className="p-6 font-bold text-gray-900 cursor-pointer text-blue-600 hover:underline transition-all" onClick={() => { setSelectedEmployee(member); setShowEmployeeDetailsModal(true); }}>{member.name}</td>
                       <td className="p-6 text-sm text-gray-900 font-semibold">
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${member.role === 'Cleaner' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
                           {member.role || 'Unknown'}
@@ -2100,12 +3002,12 @@ const OwnerDashboard = () => {
 
         {/* EMPLOYEE DETAILS MODAL */}
         {showEmployeeDetailsModal && selectedEmployee && createPortal(
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
               <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6 rounded-t-3xl">
                 <h2 className="text-2xl font-black text-white">{selectedEmployee.name}</h2>
               </div>
-              <div className="p-8">
+              <div className="p-8 overflow-y-auto overscroll-contain">
                 <div className="space-y-4">
                   <div>
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Role</label>
@@ -2209,69 +3111,90 @@ const OwnerDashboard = () => {
             </div>
 
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Guest</th>
-                    <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Property</th>
-                    <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Dates</th>
-                    <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {(() => {
-                    // Filter reservations by month
-                    const [filterYear, filterMonth] = reservationFilterMonth.split('-').map(Number);
-                    const filtered = reservationsList.filter(res => {
-                      const checkInDate = new Date(res.checkIn);
-                      const checkOutDate = new Date(res.checkOut);
-                      // Show reservation if it overlaps with the selected month
-                      return (
-                        (checkInDate.getFullYear() === filterYear && checkInDate.getMonth() + 1 === filterMonth) ||
-                        (checkOutDate.getFullYear() === filterYear && checkOutDate.getMonth() + 1 === filterMonth) ||
-                        (checkInDate <= new Date(filterYear, filterMonth, 0) && checkOutDate > new Date(filterYear, filterMonth - 1, 1))
-                      );
-                    });
-                    
-                    return filtered.length > 0 ? filtered.map((res) => (
-                      <tr key={res.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => {
-                        console.log('Clicked reservation row:', res);
-                        console.log('showReservationDetailsModal before:', showReservationDetailsModal);
-                        setSelectedReservationDetails(res);
-                        setShowReservationDetailsModal(true);
-                        console.log('showReservationDetailsModal after:', true);
-                      }}>
-                        <td className="p-6 font-bold text-gray-900" onClick={(e) => e.stopPropagation()}>
+              {(() => {
+                const [filterYear, filterMonth] = reservationFilterMonth.split('-').map(Number);
+                const filtered = reservationsList.filter(res => {
+                  const checkInDate = new Date(res.checkIn);
+                  const checkOutDate = new Date(res.checkOut);
+                  return (
+                    (checkInDate.getFullYear() === filterYear && checkInDate.getMonth() + 1 === filterMonth) ||
+                    (checkOutDate.getFullYear() === filterYear && checkOutDate.getMonth() + 1 === filterMonth) ||
+                    (checkInDate <= new Date(filterYear, filterMonth, 0) && checkOutDate > new Date(filterYear, filterMonth - 1, 1))
+                  );
+                });
+
+                return filtered.length > 0 ? (
+                  <>
+                    <div className="md:hidden space-y-4 p-4">
+                      {filtered.map((res) => (
+                        <div key={res.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedGuest(res.guestUser);
-                              setShowGuestDetailsModal(true);
+                            onClick={() => {
+                              setSelectedReservationDetails(res);
+                              setShowReservationDetailsModal(true);
                             }}
-                            className="text-blue-600 hover:text-blue-800 hover:underline transition-all cursor-pointer"
+                            className="text-blue-600 hover:text-blue-800 hover:underline font-bold text-left"
                           >
                             {res.guest}
                           </button>
-                        </td>
-                        <td className="p-6 text-sm text-gray-500">{res.property}</td>
-                        <td className="p-6 text-sm text-gray-500">{res.checkIn} - {res.checkOut}</td>
-                        <td className="p-6" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-center gap-3">
-                            <button onClick={() => openEditReservationModal(res)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={18} /></button>
-                            <button onClick={() => handleDeleteReservation(res.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
+                          <p className="text-sm text-gray-500 mt-1">{res.property}</p>
+                          <p className="text-sm text-gray-500 mt-1">{res.checkIn} - {res.checkOut}</p>
+                          <div className="flex gap-3 mt-4">
+                            <button onClick={() => openEditReservationModal(res)} className="flex-1 px-3 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all">Edit</button>
+                            <button onClick={() => handleDeleteReservation(res.id)} className="flex-1 px-3 py-2 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all">Delete</button>
                           </div>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan="5" className="p-8 text-center text-gray-400">
-                          No reservations found for {new Date(filterYear, filterMonth - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                        </td>
-                      </tr>
-                    );
-                  })()}
-                </tbody>
-              </table>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="hidden md:block">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                          <tr>
+                            <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Guest</th>
+                            <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Property</th>
+                            <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Dates</th>
+                            <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {filtered.map((res) => (
+                            <tr key={res.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => {
+                              setSelectedReservationDetails(res);
+                              setShowReservationDetailsModal(true);
+                            }}>
+                              <td className="p-6 font-bold text-gray-900" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedReservationDetails(res);
+                                    setShowReservationDetailsModal(true);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800 hover:underline transition-all cursor-pointer"
+                                >
+                                  {res.guest}
+                                </button>
+                              </td>
+                              <td className="p-6 text-sm text-gray-500">{res.property}</td>
+                              <td className="p-6 text-sm text-gray-500">{res.checkIn} - {res.checkOut}</td>
+                              <td className="p-6" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-center gap-3">
+                                  <button onClick={() => openEditReservationModal(res)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={18} /></button>
+                                  <button onClick={() => handleDeleteReservation(res.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-8 text-center text-gray-400">
+                    No reservations found for {new Date(filterYear, filterMonth - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -2292,12 +3215,12 @@ const OwnerDashboard = () => {
         {/* VIEW: MAINTENANCE & REPAIR */}
         {activeView === 'maintenance' && (
           <div className="animate-in fade-in duration-500">
-            <header className="flex justify-between items-end mb-8">
+            <header className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end mb-8">
               <div>
                 <h1 className="text-3xl font-black text-gray-900">Maintenance & Repair</h1>
                 <p className="text-gray-500">{selectedPropertyDetails?.propertyName} - Track maintenance issues and repairs</p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                 <button 
                   onClick={() => setShowUnpaidOnly(!showUnpaidOnly)}
                   style={{
@@ -2311,10 +3234,11 @@ const OwnerDashboard = () => {
                     transition: 'all 0.25s',
                     boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
                   }}
+                  className="w-full sm:w-auto"
                 >
                   Unpaid ({unpaidInvoicesList.length})
                 </button>
-                <button onClick={() => setShowReportIssueModal(true)} style={{backgroundColor: '#2563eb', color: '#ffffff', padding: '12px 24px', borderRadius: '1rem', fontWeight: '700', cursor: 'pointer', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} className="flex items-center gap-2 transition-all hover:opacity-90">
+                <button onClick={() => setShowReportIssueModal(true)} style={{backgroundColor: '#2563eb', color: '#ffffff', padding: '12px 24px', borderRadius: '1rem', fontWeight: '700', cursor: 'pointer', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} className="w-full sm:w-auto flex items-center justify-center gap-2 transition-all hover:opacity-90">
                   <Plus size={20} /> Report Issue
                 </button>
               </div>
@@ -2326,63 +3250,108 @@ const OwnerDashboard = () => {
                 <h2 className="text-xl font-black text-gray-900">{showUnpaidOnly ? 'Unpaid Invoices' : 'Invoices'} for {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h2>
               </div>
               {(showUnpaidOnly ? unpaidInvoicesList : invoicesList).length > 0 ? (
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Invoice #</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Company</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Staff Name</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Type</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Description</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Created</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
+                <>
+                  <div className="md:hidden space-y-4 p-4">
                     {(showUnpaidOnly ? unpaidInvoicesList : invoicesList).map((invoice, index) => {
                       const staffInfo = getStaffInfoById(invoice.staffId);
                       const staff = staffList.find(s => s.id === invoice.staffId);
-                      console.log('Invoice object for delete button:', invoice, 'ID:', invoice.id);
                       return (
-                        <tr key={invoice.id || `invoice-${index}`} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="p-6 font-bold text-gray-900">{invoice.invoiceNumber || '-'}</td>
-                          <td className="p-6 text-sm text-gray-600">{staffInfo.company}</td>
-                          <td className="p-6 text-sm">
-                            <span 
-                              onClick={() => {
-                                setSelectedStaffForDetails(staff);
-                                setShowStaffDetailsModal(true);
-                              }}
-                              className="text-gray-900 font-semibold cursor-pointer"
-                            >
-                              {staffInfo.name}
-                            </span>
-                          </td>
-                          <td className="p-6 text-sm text-gray-600">{invoice.type}</td>
-                          <td className="p-6 text-sm text-gray-600">{invoice.repairDescription}</td>
-                          <td className="p-6 font-semibold text-gray-900">${parseFloat(invoice.amount).toFixed(2)}</td>
-                          <td className="p-6 text-sm text-gray-600">{new Date(invoice.dateCreated).toLocaleDateString()}</td>
-                          <td className="p-6">
+                        <div key={invoice.id || `invoice-mobile-${index}`} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-gray-900">{invoice.invoiceNumber || '-'}</p>
+                              <p className="text-sm text-gray-600">{staffInfo.company}</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStaffForDetails(staff);
+                                  setShowStaffDetailsModal(true);
+                                }}
+                                className="text-sm text-blue-600 hover:text-blue-800 hover:underline mt-1"
+                              >
+                                {staffInfo.name}
+                              </button>
+                            </div>
                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${invoice.paid ? 'bg-blue-100 text-blue-700' : invoice.completed ? 'bg-green-100 text-green-700' : invoice.pending ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>
                               {invoice.paid ? 'Paid' : invoice.completed ? 'Completed' : invoice.pending ? 'Pending' : 'Open'}
                             </span>
-                          </td>
-                          <td className="p-6">
-                            <div className="flex justify-center gap-3">
-                              {showUnpaidOnly && !invoice.paid && (
-                                <button onClick={() => handlePayInvoice(invoice)} className="p-2 text-green-600 bg-green-50 hover:bg-green-100 rounded-xl transition-all" title="Mark as paid"><DollarSign size={18} /></button>
-                              )}
-                              <button onClick={() => handleEditInvoice(invoice)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all" title="Edit invoice"><Pencil size={18} /></button>
-                              <button onClick={() => handleDeleteInvoice(invoice.id)} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all" title="Delete invoice"><Trash2 size={18} /></button>
-                            </div>
-                          </td>
-                        </tr>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-3">Type: {invoice.type}</p>
+                          <p className="text-sm text-gray-600">Description: {invoice.repairDescription}</p>
+                          <p className="text-sm font-semibold text-gray-900 mt-2">Amount: ${parseFloat(invoice.amount).toFixed(2)}</p>
+                          <p className="text-sm text-gray-600">Created: {new Date(invoice.dateCreated).toLocaleDateString()}</p>
+                          <div className="flex gap-2 mt-4">
+                            {showUnpaidOnly && !invoice.paid && (
+                              <button onClick={() => handlePayInvoice(invoice)} className="flex-1 px-3 py-2 text-sm font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition-all">Pay</button>
+                            )}
+                            <button onClick={() => handleEditInvoice(invoice)} className="flex-1 px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all">Edit</button>
+                            <button onClick={() => handleDeleteInvoice(invoice.id)} className="flex-1 px-3 py-2 text-sm font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition-all">Delete</button>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+
+                  <div className="hidden md:block">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Invoice #</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Company</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Staff Name</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Type</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Description</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Created</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                          <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {(showUnpaidOnly ? unpaidInvoicesList : invoicesList).map((invoice, index) => {
+                          const staffInfo = getStaffInfoById(invoice.staffId);
+                          const staff = staffList.find(s => s.id === invoice.staffId);
+                          console.log('Invoice object for delete button:', invoice, 'ID:', invoice.id);
+                          return (
+                            <tr key={invoice.id || `invoice-${index}`} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="p-6 font-bold text-gray-900">{invoice.invoiceNumber || '-'}</td>
+                              <td className="p-6 text-sm text-gray-600">{staffInfo.company}</td>
+                              <td className="p-6 text-sm">
+                                <span 
+                                  onClick={() => {
+                                    setSelectedStaffForDetails(staff);
+                                    setShowStaffDetailsModal(true);
+                                  }}
+                                  className="text-gray-900 font-semibold cursor-pointer"
+                                >
+                                  {staffInfo.name}
+                                </span>
+                              </td>
+                              <td className="p-6 text-sm text-gray-600">{invoice.type}</td>
+                              <td className="p-6 text-sm text-gray-600">{invoice.repairDescription}</td>
+                              <td className="p-6 font-semibold text-gray-900">${parseFloat(invoice.amount).toFixed(2)}</td>
+                              <td className="p-6 text-sm text-gray-600">{new Date(invoice.dateCreated).toLocaleDateString()}</td>
+                              <td className="p-6">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${invoice.paid ? 'bg-blue-100 text-blue-700' : invoice.completed ? 'bg-green-100 text-green-700' : invoice.pending ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>
+                                  {invoice.paid ? 'Paid' : invoice.completed ? 'Completed' : invoice.pending ? 'Pending' : 'Open'}
+                                </span>
+                              </td>
+                              <td className="p-6">
+                                <div className="flex justify-center gap-3">
+                                  {showUnpaidOnly && !invoice.paid && (
+                                    <button onClick={() => handlePayInvoice(invoice)} className="p-2 text-green-600 bg-green-50 hover:bg-green-100 rounded-xl transition-all" title="Mark as paid"><DollarSign size={18} /></button>
+                                  )}
+                                  <button onClick={() => handleEditInvoice(invoice)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all" title="Edit invoice"><Pencil size={18} /></button>
+                                  <button onClick={() => handleDeleteInvoice(invoice.id)} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all" title="Delete invoice"><Trash2 size={18} /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
                 <div className="p-8 text-center">
                   <Wrench size={48} className="mx-auto text-gray-300 mb-4" />
@@ -2394,15 +3363,15 @@ const OwnerDashboard = () => {
 
             {/* STAFF DETAILS MODAL */}
             {showStaffDetailsModal && selectedStaffForDetails && createPortal(
-              <div onClick={(e) => {if (e.target === e.currentTarget) setShowStaffDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto">
-                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4 my-8 overflow-hidden">
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowStaffDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                   {/* Header */}
                   <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
                     <h2 className="text-2xl font-black text-white">Staff Member Details</h2>
                   </div>
                   
                   {/* Content */}
-                  <div className="p-8 space-y-4">
+                  <div className="p-8 space-y-4 overflow-y-auto overscroll-contain">
                     <div>
                       <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Name</p>
                       <p className="text-lg font-black text-gray-900">{selectedStaffForDetails.name}</p>
@@ -2451,8 +3420,8 @@ const OwnerDashboard = () => {
 
             {/* REPORT ISSUE MODAL */}
             {showReportIssueModal && createPortal(
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl my-8">
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                   <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6 rounded-t-3xl">
                     <h2 className="text-2xl font-black text-white">Report Maintenance Issue</h2>
                   </div>
@@ -2547,7 +3516,7 @@ const OwnerDashboard = () => {
                       console.error('Error reporting issue:', error);
                       showNotification('Failed to report issue: ' + error.message, 'error');
                     }
-                  }} className="p-8">
+                  }} className="p-8 overflow-y-auto overscroll-contain">
                     {/* Row 1: Company & Staff Name */}
                     <div className="grid grid-cols-2 gap-6 mb-6">
                       <div>
@@ -2690,8 +3659,8 @@ const OwnerDashboard = () => {
 
             {/* EDIT INVOICE MODAL */}
             {showEditInvoiceModal && selectedInvoice && createPortal(
-              <div onClick={(e) => {if (e.target === e.currentTarget) setShowEditInvoiceModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto">
-                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full mx-4 my-8 overflow-hidden">
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowEditInvoiceModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                   {/* Header */}
                   <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
                     <h2 className="text-2xl font-black text-white">Edit Invoice</h2>
@@ -2701,7 +3670,7 @@ const OwnerDashboard = () => {
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     handleSaveInvoice();
-                  }} className="p-8 space-y-6">
+                  }} className="p-8 space-y-6 overflow-y-auto overscroll-contain">
                     {/* Row 1: Company & Staff Name */}
                     <div className="grid grid-cols-2 gap-6">
                       <div>
@@ -2860,8 +3829,8 @@ const OwnerDashboard = () => {
 
             {/* PAYMENT MODAL */}
             {showPaymentModal && invoiceToPayFor && createPortal(
-              <div onClick={(e) => {if (e.target === e.currentTarget) setShowPaymentModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto">
-                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4 my-8 overflow-hidden">
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowPaymentModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                   {/* Header */}
                   <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
                     <h2 className="text-2xl font-black text-white">Record Payment</h2>
@@ -2871,7 +3840,7 @@ const OwnerDashboard = () => {
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     handleSubmitPayment();
-                  }} className="p-8 space-y-6">
+                  }} className="p-8 space-y-6 overflow-y-auto overscroll-contain">
                     {/* Amount Display */}
                     <div>
                       <label className="block text-sm font-bold text-slate-900 mb-2">Amount</label>
@@ -2923,22 +3892,136 @@ const OwnerDashboard = () => {
           </div>
         )}
 
+        {/* VIEW: REVIEWS */}
+        {activeView === 'reviews' && (
+          <div className="animate-in fade-in duration-500">
+            <div className="flex justify-between items-end mb-8">
+              <div>
+                <h1 className="text-3xl font-black text-gray-900">Guest Reviews</h1>
+                <p className="text-gray-500 font-medium">Manage and view customer testimonials</p>
+              </div>
+              <button onClick={() => { setShowReviewForm(true); setEditingReview(null); setReviewFormData({ reviewerName: '', reviewText: '', score: '', reviewDate: '' }); }} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg transition-all">
+                <Plus size={20} /> Add Review
+              </button>
+            </div>
+
+            {loadingReviews ? (
+              <div className="flex justify-center items-center py-16">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <>
+                {/* Review Form */}
+                {showReviewForm && (
+                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 mb-8">
+                    <h2 className="text-xl font-bold text-gray-900 mb-6">{editingReview ? 'Edit Review' : 'Add New Review'}</h2>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">Guest Name</label>
+                          <input
+                            type="text"
+                            value={reviewFormData.reviewerName}
+                            onChange={(e) => setReviewFormData({ ...reviewFormData, reviewerName: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Guest name"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">Review Date</label>
+                          <DatePicker
+                            selected={reviewFormData.reviewDate ? new Date(reviewFormData.reviewDate) : null}
+                            onChange={(date) => setReviewFormData({ ...reviewFormData, reviewDate: date ? date.toISOString().split('T')[0] : '' })}
+                            dateFormat="MMM dd, yyyy"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholderText="Select date"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">Rating</label>
+                          <select
+                            value={reviewFormData.score}
+                            onChange={(e) => setReviewFormData({ ...reviewFormData, score: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Select rating</option>
+                            <option value="1">1 Star</option>
+                            <option value="2">2 Stars</option>
+                            <option value="3">3 Stars</option>
+                            <option value="4">4 Stars</option>
+                            <option value="5">5 Stars</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Review Text</label>
+                        <textarea
+                          value={reviewFormData.reviewText}
+                          onChange={(e) => setReviewFormData({ ...reviewFormData, reviewText: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 h-24 resize-none"
+                          placeholder="What did the guest say about their stay?"
+                        />
+                      </div>
+                      <div className="flex gap-3 pt-4">
+                        <button onClick={() => { setShowReviewForm(false); setEditingReview(null); setReviewFormData({ reviewerName: '', reviewText: '', score: '', reviewDate: '' }); }} className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-bold hover:bg-gray-300 transition-all">Cancel</button>
+                        <button onClick={handleAddReview} className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all">{editingReview ? 'Update Review' : 'Add Review'}</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reviews Grid */}
+                {reviews.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {reviews.map((review) => (
+                      <div key={review.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="font-bold text-gray-900">{review.reviewerName}</p>
+                            <p className="text-sm text-gray-500">{new Date(review.reviewDate).toLocaleDateString()}</p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleEditReview(review)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Edit"><Pencil size={18} /></button>
+                            <button onClick={() => handleDeleteReview(review.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete"><Trash2 size={18} /></button>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 mb-3">
+                          {[...Array(parseInt(review.score) || 0)].map((_, i) => <Star key={i} size={16} fill="currentColor" className="text-yellow-400" />)}
+                        </div>
+                        <p className="text-gray-600 text-sm italic">"{review.reviewText}"</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-12 text-center">
+                    <Star size={48} className="mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500 mb-2">No reviews yet</p>
+                    <p className="text-sm text-gray-400">Click "Add Review" to add your first guest review</p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* GUEST DETAILS MODAL - Global */}
         {showGuestDetailsModal && selectedGuest && (() => {
           console.log('GUEST MODAL RENDERING - about to create portal');
           return createPortal(
             <>
               {console.log('GUEST MODAL JSX RENDERING')}
-              <div onClick={(e) => {if (e.target === e.currentTarget) setShowGuestDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-auto" style={{display: 'flex'}}>
+              <div onClick={(e) => {if (e.target === e.currentTarget) setShowGuestDetailsModal(false);}} className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4" style={{display: 'flex'}}>
                 {console.log('INSIDE GUEST MODAL BACKDROP')}
-                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4 my-8 overflow-hidden">
+                <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl max-w-md w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
                   {/* Header */}
                   <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
                     <h2 className="text-2xl font-black text-white">Guest Details</h2>
                   </div>
               
                   {/* Content */}
-                  <div className="p-8 space-y-4">
+                  <div className="p-8 space-y-4 overflow-y-auto overscroll-contain">
                     <div>
                       <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Name</p>
                       <p className="text-lg font-black text-gray-900">{selectedGuest.firstName} {selectedGuest.lastName}</p>
@@ -3285,6 +4368,7 @@ const OwnerDashboard = () => {
         show={showReservationModal}
         isEditing={editingReservation !== null}
         formData={reservationForm}
+        guestPreview={registeredGuestPreview}
         onFormChange={(field, value) => {
           setReservationForm({...reservationForm, [field]: value});
           // Clear error for this field when user starts typing
@@ -3301,8 +4385,8 @@ const OwnerDashboard = () => {
         console.log('Rendering modal with reservation:', selectedReservationDetails);
         console.log('showReservationDetailsModal:', showReservationDetailsModal);
         return createPortal(
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-[9999]">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-[9999] overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
               <div className="flex justify-between items-center">
@@ -3320,7 +4404,7 @@ const OwnerDashboard = () => {
             </div>
             
             {/* Content */}
-            <div className="p-8 space-y-4">
+            <div className="p-5 sm:p-8 space-y-4 overflow-y-auto overscroll-contain">
               <div className="border-b border-slate-200 pb-4">
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Guest Name</p>
                 <p className="text-lg font-bold text-slate-900">{selectedReservationDetails.guest}</p>
@@ -3343,12 +4427,26 @@ const OwnerDashboard = () => {
 
               <div className="border-b border-slate-200 pb-4">
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Check-in Date</p>
-                <p className="text-lg text-slate-700">{new Date(selectedReservationDetails.checkIn).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p className="text-lg text-slate-700">{(() => {
+                  const checkIn = selectedReservationDetails.checkIn;
+                  if (typeof checkIn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(checkIn)) {
+                    const [year, month, day] = checkIn.split('-').map(Number);
+                    return new Date(year, month - 1, day).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+                  }
+                  return new Date(checkIn).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+                })()}</p>
               </div>
 
               <div className="border-b border-slate-200 pb-4">
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Check-out Date</p>
-                <p className="text-lg text-slate-700">{new Date(selectedReservationDetails.checkOut).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p className="text-lg text-slate-700">{(() => {
+                  const checkOut = selectedReservationDetails.checkOut;
+                  if (typeof checkOut === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(checkOut)) {
+                    const [year, month, day] = checkOut.split('-').map(Number);
+                    return new Date(year, month - 1, day).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+                  }
+                  return new Date(checkOut).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+                })()}</p>
               </div>
 
               <div className="border-b border-slate-200 pb-4">
@@ -3358,7 +4456,12 @@ const OwnerDashboard = () => {
 
               <div className="border-b border-slate-200 pb-4">
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Assigned Cleaner</p>
-                <p className="text-lg text-slate-700">{selectedReservationDetails.staffId || 'Not assigned'}</p>
+                <p className="text-lg text-slate-700">{(() => {
+                  const cleanerId = parseInt(selectedReservationDetails.staffId, 10);
+                  if (Number.isNaN(cleanerId)) return 'Not assigned';
+                  const cleaner = staffList.find(member => parseInt(member.id, 10) === cleanerId);
+                  return cleaner?.name || `${cleaner?.firstName || ''} ${cleaner?.lastName || ''}`.trim() || `Cleaner #${cleanerId}`;
+                })()}</p>
               </div>
 
               <div className="border-b border-slate-200 pb-4">
@@ -3392,8 +4495,8 @@ const OwnerDashboard = () => {
 
       {/* OWNER DETAILS MODAL */}
       {showOwnerModal && selectedOwner && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6">
               <div className="flex justify-between items-center">
@@ -3408,7 +4511,7 @@ const OwnerDashboard = () => {
             </div>
             
             {/* Content */}
-            <div className="p-8 space-y-6">
+            <div className="p-8 space-y-6 overflow-y-auto overscroll-contain">
               <div className="border-b border-slate-200 pb-4">
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Full Name</p>
                 <p className="text-xl font-bold text-slate-900">{selectedOwner.firstName} {selectedOwner.lastName}</p>
@@ -3487,12 +4590,12 @@ const AlertItem = ({ title, time, type }) => (
 );
 
 // Reservation Modal Component (inside OwnerDashboard but before export)
-function ReservationModal({ show, isEditing, formData, onFormChange, onSave, onCancel, cleaners = [], errors = {} }) {
+function ReservationModal({ show, isEditing, formData, guestPreview, onFormChange, onSave, onCancel, cleaners = [], errors = {} }) {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-8">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-blue-600 px-8 py-6">
           <h2 className="text-2xl font-black text-white">
@@ -3501,7 +4604,16 @@ function ReservationModal({ show, isEditing, formData, onFormChange, onSave, onC
         </div>
         
         {/* Content */}
-        <div className="p-8 space-y-4 max-h-96 overflow-y-auto pb-6 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-gray-100">
+        <div className="p-8 space-y-4 overflow-y-auto overscroll-contain pb-6 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-gray-100">
+          {guestPreview && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2">Registered Guest</p>
+              <p className="text-sm font-semibold text-slate-900">{`${guestPreview.firstName || ''} ${guestPreview.lastName || ''}`.trim() || 'N/A'}</p>
+              <p className="text-sm text-slate-700">{guestPreview.email || 'No email provided'}</p>
+              <p className="text-sm text-slate-700">{guestPreview.phoneNumber || 'No phone provided'}</p>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Confirmation Number <span className="text-red-500">*</span></label>
             <input 
