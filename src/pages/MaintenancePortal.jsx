@@ -580,15 +580,15 @@ const MaintenancePortal = () => {
 
       {/* COMPANY DETAILS MODAL */}
       {showCompanyModal && selectedCompany && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="bg-gradient-to-r from-red-600 to-orange-600 px-8 py-6 flex justify-between items-center">
               <h2 className="text-2xl font-black text-white">Company Details</h2>
               <button onClick={() => setShowCompanyModal(false)} style={{backgroundColor: 'transparent'}} className="text-white hover:opacity-80 transition-all text-2xl">
                 ×
               </button>
             </div>
-            <div className="p-8 space-y-4">
+            <div className="p-8 space-y-4 overflow-y-auto overscroll-contain">
               <div>
                 <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Company Name</p>
                 <p className="text-lg font-bold text-gray-900">{getStaffInfo(selectedCompany.staffId).company}</p>
@@ -632,15 +632,15 @@ const MaintenancePortal = () => {
 
       {/* NOTES MODAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="bg-gradient-to-r from-red-600 to-orange-600 px-8 py-6 flex justify-between items-center">
               <h2 className="text-2xl font-black text-white">Work Order Notes</h2>
               <button onClick={() => setShowModal(false)} style={{backgroundColor: 'transparent'}} className="text-white hover:opacity-80 transition-all text-2xl">
                 ×
               </button>
             </div>
-            <div className="p-8">
+            <div className="p-8 overflow-y-auto overscroll-contain">
               <p className="text-sm font-semibold text-gray-600 mb-3">{selectedOrder?.propertyName}</p>
               <textarea
                 value={editNotes}
@@ -671,15 +671,15 @@ const MaintenancePortal = () => {
 
       {/* SCHEDULING MODAL */}
       {showSchedulingModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
             <div className="bg-gradient-to-r from-red-600 to-orange-600 px-8 py-6 flex justify-between items-center">
               <h2 className="text-2xl font-black text-white">Schedule Work</h2>
               <button onClick={() => setShowSchedulingModal(false)} className="text-white hover:opacity-80 transition-all text-2xl">
                 ×
               </button>
             </div>
-            <div className="p-8">
+            <div className="p-8 overflow-y-auto overscroll-contain">
               <p className="text-sm font-semibold text-gray-600 mb-6">
                 Scheduling for: <span className="text-gray-900 font-black">{selectedDateForScheduling?.toLocaleDateString()}</span>
               </p>

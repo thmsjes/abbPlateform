@@ -9,7 +9,8 @@ import {
   Trash2, 
   DollarSign,
   TrendingUp,
-  Calendar
+  Calendar,
+  Star
 } from 'lucide-react';
 
 const OwnerPortal = () => {
@@ -31,9 +32,134 @@ const OwnerPortal = () => {
     { id: 2, guest: 'Bob Wilson', property: 'Mountain Cabin', checkIn: '2026-02-15', status: 'Pending' },
   ]);
 
+  const [reviews, setReviews] = useState([
+    { id: 1, name: 'Sarah Jenkins', date: 'October 2025', text: 'Absolutely stunning property. The attention to detail in the decor made it feel like a boutique hotel.', rating: 5 },
+    { id: 2, name: 'Michael Chen', date: 'December 2025', text: 'The perfect getaway. Super clean, modern amenities, and the kayaks were a huge plus.', rating: 5 },
+    { id: 3, name: 'Emma Thompson', date: 'January 2026', text: 'Great location and very responsive host. The kitchen had everything we needed for our family of 10.', rating: 5 },
+  ]);
+
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [editingReview, setEditingReview] = useState(null);
+  const [formData, setFormData] = useState({ name: '', date: '', text: '', rating: 5 });
+
   // --- RENDERING LOGIC ---
+  const handleAddReview = () => {
+    if (editingReview) {
+      setReviews(reviews.map(r => r.id === editingReview.id ? { ...formData, id: editingReview.id } : r));
+      setEditingReview(null);
+    } else {
+      setReviews([...reviews, { ...formData, id: Date.now() }]);
+    }
+    setFormData({ name: '', date: '', text: '', rating: 5 });
+    setShowReviewForm(false);
+  };
+
+  const handleEditReview = (review) => {
+    setEditingReview(review);
+    setFormData(review);
+    setShowReviewForm(true);
+  };
+
+  const handleDeleteReview = (id) => {
+    setReviews(reviews.filter(r => r.id !== id));
+  };
+
   const renderContent = () => {
     switch (activeView) {
+      case 'reviews':
+        return (
+          <div className="animate-in fade-in duration-300">
+            <div className="flex justify-between items-end mb-8">
+              <div>
+                <h1 className="text-3xl font-black text-gray-900">Guest Reviews</h1>
+                <p className="text-gray-500 font-medium">Manage and add customer testimonials</p>
+              </div>
+              <button onClick={() => { setShowReviewForm(true); setEditingReview(null); setFormData({ name: '', date: '', text: '', rating: 5 }); }} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg transition-all">
+                <Plus size={20} /> Add Review
+              </button>
+            </div>
+
+            {showReviewForm && (
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 mb-8">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">{editingReview ? 'Edit Review' : 'Add New Review'}</h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input 
+                      type="text"
+                      placeholder="Guest Name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input 
+                      type="text"
+                      placeholder="Date (e.g., January 2026)"
+                      value={formData.date}
+                      onChange={(e) => setFormData({...formData, date: e.target.value})}
+                      className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <textarea 
+                    placeholder="Review text"
+                    value={formData.text}
+                    onChange={(e) => setFormData({...formData, text: e.target.value})}
+                    rows="4"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center gap-3">
+                    <label className="font-semibold text-gray-700">Rating:</label>
+                    <div className="flex gap-2">
+                      {[1,2,3,4,5].map(star => (
+                        <button 
+                          key={star}
+                          onClick={() => setFormData({...formData, rating: star})}
+                          className={`p-1 transition-colors ${formData.rating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
+                        >
+                          <Star size={24} fill="currentColor" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end">
+                    <button 
+                      onClick={() => setShowReviewForm(false)} 
+                      className="px-6 py-3 border border-gray-300 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleAddReview}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all"
+                    >
+                      {editingReview ? 'Update Review' : 'Add Review'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {reviews.map((review) => (
+                <div key={review.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className="font-bold text-gray-900">{review.name}</h4>
+                      <p className="text-xs text-gray-500">{review.date}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEditReview(review)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Pencil size={18} /></button>
+                      <button onClick={() => handleDeleteReview(review.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 mb-3">
+                    {[...Array(review.rating)].map((_, i) => <Star key={i} size={16} fill="currentColor" className="text-yellow-400" />)}
+                  </div>
+                  <p className="text-gray-600 text-sm italic">"{review.text}"</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
       case 'staff':
         return (
           <div className="animate-in fade-in duration-300">
@@ -157,6 +283,12 @@ const OwnerPortal = () => {
             onClick={() => setActiveView('reservations')} 
             icon={<Calendar size={20} />} 
             label="Reservations" 
+          />
+          <SidebarButton 
+            active={activeView === 'reviews'} 
+            onClick={() => setActiveView('reviews')} 
+            icon={<Star size={20} />} 
+            label="Reviews" 
           />
         </nav>
         <div className="p-4 border-t border-slate-800">

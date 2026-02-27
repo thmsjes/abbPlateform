@@ -1,21 +1,83 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Wifi, Car, Coffee, Wind, Dog, Waves, X, Kayak, KeyRound, BedDouble, 
   Bath, Bike, Flame, Fence, Lock, WashingMachine, Star, Quote 
 } from 'lucide-react';
 import { Camera, Instagram } from 'lucide-react'; // New icons for this section
+import { getReviewsByPropertyId } from '../apiCalls';
 // Local Assets
 import Dock from '../assets/Dock.jpg';
 import BackYard from '../assets/BackYard.jpg';
 import BackYard2 from '../assets/BackYard2.jpg';
 import DinningRoom from '../assets/DinningRoom.jpg';
 import Sunset from '../assets/Sunset.jpg';
+import Fish from '../assets/fish.jpg'
+import Fish1 from '../assets/fish1.jpg'
+import Fish2 from '../assets/fish2.jpg'
+import Ladyo from '../assets/ladyo.jpg'
+import Baby from '../assets/baby.jpg'
+import BeachSunset from '../assets/beachSunset.jpg'
 
 const GuestLandingPage = () => {
   const [selectedImg, setSelectedImg] = useState(null);
   const [selectedAmenity, setSelectedAmenity] = useState(null);
+  const [reviews, setReviews] = useState([
+    {
+      id: 1,
+      reviewerName: "Sarah Jenkins",
+      date: "October 2025",
+      reviewText: "Absolutely stunning property. The attention to detail in the decor made it feel like a boutique hotel. We loved the sunset views from the dock!",
+      score: 5
+    },
+    {
+      id: 2,
+      reviewerName: "Michael Chen",
+      date: "December 2025",
+      reviewText: "The perfect getaway. Super clean, modern amenities, and the kayaks were a huge plus. Will definitely be coming back!",
+      score: 5
+    },
+    {
+      id: 3,
+      reviewerName: "Emma Thompson",
+      date: "January 2026",
+      reviewText: "Great location and very responsive host. The kitchen had everything we needed for our family of 10. Highly recommend!",
+      score: 5
+    }
+  ]);
+  const [_loadingReviews, _setLoadingReviews] = useState(false);
 
+  // Fetch reviews on component mount
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        _setLoadingReviews(true);
+        // Assuming propertyId = 2 for Serenity on Sylvan
+        // You can change this to a dynamic propertyId if needed
+        const propertyId = 2;
+        const reviewsData = await getReviewsByPropertyId({ token: '', propertyId });
+        
+        if (reviewsData?.reviews && Array.isArray(reviewsData.reviews)) {
+          // Transform API response to match display format
+          const transformedReviews = reviewsData.reviews.map(review => ({
+            id: review.id,
+            reviewerName: review.reviewerName,
+            date: review.reviewDate ? new Date(review.reviewDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '',
+            reviewText: review.reviewText,
+            score: parseInt(review.score) || 5
+          }));
+          setReviews(transformedReviews);
+        }
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        // Keep default reviews on error
+      } finally {
+        _setLoadingReviews(false);
+      }
+    };
+
+    fetchReviews();
+  }, []);
 
   const propertyImages = [
     { url: BackYard },
@@ -26,51 +88,28 @@ const GuestLandingPage = () => {
 
   //Property Ammenities Data
   const amenitiesList = [
-  { icon: <Waves />, label: "Waterfront", desc: "Private access to Sylvan Lake. Perfect for morning swims or watching the sunrise." },
-  { icon: <Lock />, label: "Private Dock", desc: "Our 23 x 23 wooden dock is available for your boat, or just for lounging. Offering mooring poles and deep water access to the Erie Canal and Lake Oneida." },
-  { icon: <Wind />, label: "Air Conditioning", desc: "Central cooling throughout the home to keep you comfortable in the summer heat." },
-  { icon: <Dog />, label: "Pet Friendly", desc: "We welcome up to 2 well-behaved dogs. The yard is fully prepared for them!" },
-  { icon: <Fence />, label: "Fully Fenced Yard", desc: "A safe, enclosed space for children and pets to play safely outdoors." },
-  { icon: <WashingMachine />, label: "On-Site Laundry", desc: "Full-sized washer and dryer available. We provide detergent and dryer sheets." },
-  { icon: <Wifi />, label: "Fast WiFi", desc: "High-speed Starlink internet—reliable enough for video calls or streaming movies." },
-  { icon: <Coffee />, label: "Coffee Station", desc: "Fully stocked with a Keurig, local ground coffee, creamers, and various teas." },
-  { icon: <KeyRound />, label: "Self Check-in", desc: "Check yourself in with our secure smart lock. Your code will be sent 24 hours before arrival." },
-  { icon: <Kayak />, label: "3 Kayaks", desc: "We provide 3 adult kayaks and life jackets for guest use at no extra charge." },
-  { icon: <Bike />, label: "2 Bicycles", desc: "Two cruiser bikes available to explore the local trails and neighborhood." },
-  { icon: <BedDouble />, label: "Sleeps 11", desc: "5 bedrooms featuring premium memory foam mattresses and 100% cotton linens." },
-];
-
-  // Review Data
-  const reviews = [
-    {
-      id: 1,
-      name: "Sarah Jenkins",
-      date: "October 2025",
-      text: "Absolutely stunning property. The attention to detail in the decor made it feel like a boutique hotel. We loved the sunset views from the dock!",
-      rating: 5
-    },
-    {
-      id: 2,
-      name: "Michael Chen",
-      date: "December 2025",
-      text: "The perfect getaway. Super clean, modern amenities, and the kayaks were a huge plus. Will definitely be coming back!",
-      rating: 5
-    },
-    {
-      id: 3,
-      name: "Emma Thompson",
-      date: "January 2026",
-      text: "Great location and very responsive host. The kitchen had everything we needed for our family of 10. Highly recommend!",
-      rating: 5
-    }
+    { icon: <Waves />, label: "Waterfront", desc: "Private access to Fish Creek, Erie Canal, and Lake Oneida. Perfect for morning swims or watching the sunrise." },
+    { icon: <Lock />, label: "Private Dock", desc: "Our 23 x 23 wooden dock is available for your boat, or just for lounging. Offering mooring poles and deep water access to the Erie Canal and Lake Oneida." },
+    { icon: <Wind />, label: "Air Conditioning", desc: "Central cooling throughout the home to keep you comfortable in the summer heat." },
+    { icon: <Dog />, label: "Pet Friendly", desc: "We welcome up to 2 well-behaved dogs. The yard is fully prepared for them!" },
+    { icon: <Fence />, label: "Fully Fenced Yard", desc: "A safe, enclosed space for children and pets to play safely outdoors." },
+    { icon: <WashingMachine />, label: "On-Site Laundry", desc: "Full-sized washer and dryer available. We provide detergent and dryer sheets." },
+    { icon: <Wifi />, label: "Fast WiFi", desc: "High-speed Verizon internet—reliable enough for video calls or streaming movies." },
+    { icon: <Coffee />, label: "Coffee Station", desc: "Fully stocked with a Keurig, local ground coffee, creamers, and various teas." },
+    { icon: <KeyRound />, label: "Self Check-in", desc: "Check yourself in with our secure smart lock. Your code will be sent 24 hours before arrival." },
+    { icon: <Kayak />, label: "3 Kayaks", desc: "We provide 3 adult kayaks and life jackets for guest use at no extra charge." },
+    { icon: <Bike />, label: "2 Bicycles", desc: "Two cruiser bikes available to explore the local trails and neighborhood." },
+    { icon: <BedDouble />, label: "Sleeps 11", desc: "4 bedrooms featuring 1 King, 2 Queens, 2 Twins, 1 Twin trundle, and two pull out couches. All linens and pillows provided" },
   ];
 
   // Guest Photos Data
   const guestPhotos = [
-    { url: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?q=80&w=600', caption: "Morning coffee on the dock ☕" },
-    { url: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=600', caption: "Kids loved the kayaks!" },
-    { url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=600', caption: "Sunset was unreal tonight." },
-    { url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=600', caption: "Finally caught a fish! 🎣" },
+    { url: Fish, caption: "Bass right off the dock." },
+    { url: Fish1, caption: "PB Drum" },
+    { url: BeachSunset, caption: "Sunset was unreal tonight." },
+    { url: Fish2, caption: "Finally caught a fish! 🎣" },
+    { url: Baby, caption: "Just hanging out!" },
+    { url: Ladyo, caption: "Lady O was so peaceful today" },
   ];
 
   return (
@@ -156,15 +195,15 @@ const GuestLandingPage = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-10">
             <div>
               <h2 className="text-3xl font-bold text-gray-800">Guest Reviews</h2>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-2">
                 <div className="flex text-pink-500">
                   <Star size={18} fill="currentColor" /><Star size={18} fill="currentColor" /><Star size={18} fill="currentColor" /><Star size={18} fill="currentColor" /><Star size={18} fill="currentColor" />
                 </div>
-                <span className="font-bold">4.9 / 5</span>
-                <span className="text-gray-400 text-sm">(85 Verified Reviews)</span>
+                <span className="font-bold">5.0 / 5</span>
+                <span className="text-gray-400 text-sm">(21 Verified Reviews)</span>
               </div>
             </div>
-            <button className="mt-4 md:mt-0 bg-pink-500 text-white px-8 py-3 rounded-xl font-bold hover:bg-pink-600 transition-colors shadow-lg shadow-pink-100">
+            <button className="hidden md:flex items-center justify-center mt-4 md:mt-0 bg-pink-500 text-white px-8 py-3 rounded-xl font-bold hover:bg-pink-600 transition-colors shadow-lg shadow-pink-100">
               Book Your Stay
             </button>
           </div>
@@ -175,15 +214,15 @@ const GuestLandingPage = () => {
                 <Quote className="absolute -right-2 -top-2 w-16 h-16 text-gray-50 group-hover:text-pink-50 transition-colors" />
                 <div className="relative z-10">
                   <div className="flex text-pink-500 mb-4">
-                    {[...Array(review.rating)].map((_, i) => <Star key={i} size={14} fill="currentColor" />)}
+                    {[...Array(review.score)].map((_, i) => <Star key={i} size={14} fill="currentColor" />)}
                   </div>
-                  <p className="text-gray-600 leading-relaxed mb-6 italic">"{review.text}"</p>
+                  <p className="text-gray-600 leading-relaxed mb-6 italic">"{review.reviewText}"</p>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center font-bold">
-                      {review.name.charAt(0)}
+                      {review.reviewerName.charAt(0)}
                     </div>
                     <div>
-                      <h4 className="font-bold text-gray-900 leading-none">{review.name}</h4>
+                      <h4 className="font-bold text-gray-900 leading-none">{review.reviewerName}</h4>
                       <span className="text-xs text-gray-400">{review.date}</span>
                     </div>
                   </div>
@@ -196,11 +235,11 @@ const GuestLandingPage = () => {
        {/* AMENITY DESCRIPTION MODAL */} 
         {selectedAmenity && (
           <div 
-            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-2 sm:p-4"
             onClick={() => setSelectedAmenity(null)}
           >
             <div 
-              className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in duration-200"
+              className="bg-white rounded-[2rem] p-8 max-w-sm w-full h-[calc(100dvh-1rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] shadow-2xl relative animate-in fade-in zoom-in duration-200 overflow-y-auto overscroll-contain"
               onClick={(e) => e.stopPropagation()} 
             >
               {/* Icon with specialized pink styling */}
@@ -242,46 +281,47 @@ const GuestLandingPage = () => {
       {/* 5. EXTERNAL BOOKING SECTION */}
 
       <section className="mb-24 px-4">
-        <div className="max-w-4xl mx-auto bg-white rounded-[3rem] p-8 md:p-12 text-center shadow-xl border border-pink-50 relative overflow-hidden">
+        <div className="max-w-4xl mx-auto bg-white rounded-2xl sm:rounded-[3rem] p-6 sm:p-8 md:p-12 text-center shadow-xl border border-pink-50 relative overflow-hidden">
           {/* Subtle decorative background glow */}
           <div className="absolute -top-24 -right-24 w-64 h-64 bg-pink-100/50 rounded-full blur-3xl" />
 
           <div className="relative z-10">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4 tracking-tight">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-4 tracking-tight">
               Ready to visit Serenity on Sylvan?
             </h2>
-            <p className="text-gray-500 mb-10 max-w-lg mx-auto font-medium">
+            <p className="text-gray-500 mb-8 sm:mb-10 max-w-lg mx-auto font-medium text-sm sm:text-base">
               Book directly with us for the best rates, or use your favorite booking platform.
             </p>
 
-            <div className="flex flex-col gap-6 items-center justify-center">
+            <div className="flex flex-col gap-4 sm:gap-6 items-center justify-center">
               {/* PRIMARY: DIRECT BOOKING */}
               <button 
                 onClick={() => window.location.href = 'mailto:your-email@example.com?subject=Booking Inquiry for Serenity on Sylvan'}
                 className="
-                  flex items-center justify-center gap-2
-                  text-sm font-black uppercase tracking-[0.25em] 
+                  flex items-center justify-center gap-1 sm:gap-2
+                  text-[10px] sm:text-xs md:text-sm font-black uppercase tracking-[0.1em] sm:tracking-[0.15em] md:tracking-[0.25em] 
                   text-pink-500 hover:!text-blue-500 
-                  transition-colors duration-300 whitespace-nowrap
+                  transition-colors duration-300
                   bg-transparent border-none p-0 
                   outline-none focus:outline-none focus:ring-0
                   cursor-pointer no-underline
                 "
                 style={{ outline: 'none', background: 'none', border: 'none', boxShadow: 'none' }}
       >       
-                <Camera size={18} strokeWidth={2.5} />
-                Book Directly with Host
+                <Camera size={14} strokeWidth={2.5} />
+                <span className="hidden sm:inline">Book Directly with Host</span>
+                <span className="sm:hidden">Book</span>
               </button>
 
-              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center items-center">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Or find us on:</span>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full justify-center items-center">
+                <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">Or find us on:</span>
 
                 {/* SECONDARY: Airbnb */}
                 <a 
                   href="https://airbnb.com/h/your-property-link" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-sm transition-all"
+                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all"
                 >
                   Airbnb
                 </a>
@@ -291,18 +331,18 @@ const GuestLandingPage = () => {
                   href="https://vrbo.com/your-property-id" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-sm transition-all"
+                  className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all"
                 >
                   VRBO
                 </a>
               </div>
             </div>
 
-            <div className="mt-10 pt-8 border-t border-gray-100 flex flex-wrap justify-center gap-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+            <div className="mt-8 sm:mt-10 pt-6 sm:pt-8 border-t border-gray-100 flex flex-wrap justify-center gap-2 sm:gap-6 text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] sm:tracking-[0.2em]">
               <span>No Service Fees</span>
-              <span>•</span>
+              <span className="hidden sm:inline">•</span>
               <span>Best Price Guaranteed</span>
-              <span>•</span>
+              <span className="hidden sm:inline">•</span>
               <span>Personalized Service</span>
             </div>
           </div>
@@ -310,7 +350,7 @@ const GuestLandingPage = () => {
       </section>
       
       <footer className="border-t border-gray-200 py-10 bg-white">
-        <div className="max-w-6xl mx-auto px-4 flex justify-between items-center text-sm text-gray-500">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center text-xs sm:text-sm text-gray-500 gap-3 sm:gap-0">
           <p>© 2026 STRway Management Systems</p>
           <Link to="/portals" className="hover:text-pink-500 transition-colors font-medium">Staff Portal</Link>
         </div>
