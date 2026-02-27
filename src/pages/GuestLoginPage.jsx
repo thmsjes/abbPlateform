@@ -1,24 +1,75 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyRound, ArrowRight, MapPin } from 'lucide-react';
 import { getReservationByReference } from '../apiCalls';
 
+const getInitialBookingReference = () => {
+  const params = new URLSearchParams(window.location.search);
+  const refFromQuery = params.get('ref') || params.get('bookingRef') || params.get('confirmationNumber');
+  if (refFromQuery && refFromQuery.trim()) {
+    return refFromQuery.trim();
+  }
+
+  const savedRef = localStorage.getItem('bookingRef');
+  return savedRef ? savedRef.trim() : '';
+};
+
+const getQueryBookingReference = () => {
+  const params = new URLSearchParams(window.location.search);
+  const refFromQuery = params.get('ref') || params.get('bookingRef') || params.get('confirmationNumber');
+  return refFromQuery && refFromQuery.trim() ? refFromQuery.trim() : '';
+};
+
+const normalizeReservationData = (rawData) => {
+  const source = Array.isArray(rawData)
+    ? rawData[0]
+    : (rawData?.reservation || rawData?.data || rawData);
+
+  if (!source || typeof source !== 'object') return null;
+
+  const guest = source.guestUser || source.guest || source.customer || {};
+  const property = source.propertyDetails || source.property || {};
+  const hasDogs = source.dogs ?? source.hasDogs;
+
+  return {
+    ...source,
+    confirmationNumber: source.confirmationNumber || source.confirmation || source.referenceNumber || '',
+    checkInDate: source.checkInDate || source.checkIn || source.arrivalDate || '',
+    checkoutDate: source.checkoutDate || source.checkOutDate || source.checkOut || source.departureDate || '',
+    lockCode: source.lockCode || '',
+    propertyId: source.propertyId || property.id || property.propertyId || '',
+    customerId: source.customerId || source.userId || guest.id || guest.userId || '',
+    firstName: source.firstName || guest.firstName || '',
+    lastName: source.lastName || guest.lastName || '',
+    email: source.email || guest.email || '',
+    phoneNumber: source.phoneNumber || guest.phoneNumber || '',
+    propertyName: source.propertyName || property.propertyName || property.name || '',
+    address: source.address || property.address || '',
+    city: source.city || property.city || '',
+    state: source.state || property.state || '',
+    zip: source.zip || property.zip || '',
+    guestCount: source.guestCount ?? source.numberOfGuests ?? 0,
+    dogs: typeof hasDogs === 'boolean' ? (hasDogs ? 'Yes' : 'No') : (hasDogs ?? 'No')
+  };
+};
+
 const GuestLogin = () => {
-  const [bookingRef, setBookingRef] = useState('');
+  const [bookingRef, setBookingRef] = useState(getInitialBookingReference);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const hasAutoSubmittedRef = useRef(false);
   const navigate = useNavigate();
 
-  const handleGuestLogin = async (e) => {
-    e.preventDefault();
+  const performGuestLogin = useCallback(async (referenceValue) => {
     setLoading(true);
     setError('');
 
     try {
-      const reservationData = await getReservationByReference(bookingRef);
+      const reservationApiData = await getReservationByReference(referenceValue);
+      const reservationData = normalizeReservationData(reservationApiData);
       
       // Validate that the response contains a confirmationNumber
-      if (!reservationData.confirmationNumber) {
+      if (!reservationData?.confirmationNumber) {
         setError('Booking reference not found. Please check and try again.');
         setLoading(false);
         return;
@@ -26,7 +77,7 @@ const GuestLogin = () => {
       
       // Store reservation data and role
       localStorage.setItem('userRole', 'guest');
-      localStorage.setItem('bookingRef', bookingRef);
+      localStorage.setItem('bookingRef', referenceValue);
       localStorage.setItem('reservationData', JSON.stringify(reservationData));
       localStorage.setItem('guestName', `${reservationData.firstName} ${reservationData.lastName}`);
       
@@ -40,7 +91,30 @@ const GuestLogin = () => {
       }
       setLoading(false);
     }
+  }, [navigate]);
+
+  const handleGuestLogin = async (e) => {
+    e.preventDefault();
+    const referenceValue = bookingRef.trim();
+    if (!referenceValue) return;
+    await performGuestLogin(referenceValue);
   };
+
+  useEffect(() => {
+    if (hasAutoSubmittedRef.current || loading) return;
+
+    const refFromQuery = getQueryBookingReference();
+    if (!refFromQuery) return;
+
+    hasAutoSubmittedRef.current = true;
+    const timeoutId = window.setTimeout(() => {
+      performGuestLogin(refFromQuery);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [loading, performGuestLogin]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-6">

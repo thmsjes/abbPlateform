@@ -47,14 +47,19 @@ export const getExpenses = async ({token, attributes}) => {
 
 export const getPropertyById = async ({token, propertyId}) => {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getPropertyById`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
+    const requestConfig = {
       params: {
         propertyId: propertyId
       }
-    });
+    };
+
+    if (token) {
+      requestConfig.headers = {
+        Authorization: `Bearer ${token}`
+      };
+    }
+
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getPropertyById`, requestConfig);
     // Extract the property from the array and include owner info
     const property = response.data.property && Array.isArray(response.data.property) 
       ? response.data.property[0] 
@@ -72,14 +77,19 @@ export const getPropertyById = async ({token, propertyId}) => {
 
 export const getUserById = async ({ token, id }) => {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/User`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
+    const requestConfig = {
       params: {
         id
       }
-    });
+    };
+
+    if (token) {
+      requestConfig.headers = {
+        Authorization: `Bearer ${token}`
+      };
+    }
+
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/User`, requestConfig);
     return response.data;
   } catch (error) {
     console.error("Error fetching user by ID:", error);
