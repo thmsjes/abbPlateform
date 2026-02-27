@@ -2,10 +2,63 @@ import React, { useState, useEffect } from 'react';
 import { Wifi, BookOpen, Map, LogOut, Info, ClipboardCheck, MessageSquare, AlertCircle, X, MapPin, Phone, Thermometer, Tv, Calendar, Home, Users, Dog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
+import { getReservationByReference, getPropertyById, getUserById } from '../apiCalls';
+
+const normalizeReservationData = (rawData) => {
+  const source = Array.isArray(rawData)
+    ? rawData[0]
+    : (rawData?.reservation || rawData?.data || rawData);
+
+  if (!source || typeof source !== 'object') return null;
+
+  const guest = source.guestUser || source.guest || source.customer || {};
+  const property = source.propertyDetails || source.property || {};
+
+  const hasDogs = source.dogs ?? source.hasDogs;
+  const rawEmail = source.email || guest.email || '';
+  const normalizedEmail = typeof rawEmail === 'string' && rawEmail.toLowerCase().includes('@guest.local') ? '' : rawEmail;
+
+  return {
+    ...source,
+    confirmationNumber: source.confirmationNumber || source.confirmation || source.referenceNumber || '',
+    checkInDate: source.checkInDate || source.checkIn || source.arrivalDate || '',
+    checkoutDate: source.checkoutDate || source.checkOutDate || source.checkOut || source.departureDate || '',
+    lockCode: source.lockCode || '',
+    propertyId: source.propertyId || property.id || property.propertyId || '',
+    customerId: source.customerId || source.userId || guest.id || guest.userId || '',
+    firstName: source.firstName || guest.firstName || '',
+    lastName: source.lastName || guest.lastName || '',
+    email: normalizedEmail,
+    phoneNumber: source.phoneNumber || guest.phoneNumber || '',
+    propertyName: source.propertyName || property.propertyName || property.name || '',
+    address: source.address || property.address || '',
+    city: source.city || property.city || '',
+    state: source.state || property.state || '',
+    zip: source.zip || property.zip || '',
+    guestCount: source.guestCount ?? source.numberOfGuests ?? 0,
+    dogs: typeof hasDogs === 'boolean' ? (hasDogs ? 'Yes' : 'No') : (hasDogs ?? 'No')
+  };
+};
 
 const GuestDashboard = () => {
   const navigate = useNavigate();
-  const [reservationData, setReservationData] = useState(null);
+  const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isIOS = /iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+  const isAndroid = /Android/i.test(window.navigator.userAgent);
+  const isSamsungBrowser = /SamsungBrowser/i.test(window.navigator.userAgent);
+  const [isInstallBannerDismissed, setIsInstallBannerDismissed] = useState(localStorage.getItem('guestInstallBannerDismissed') === 'true');
+  const hasSeenInstallHelp = localStorage.getItem('guestInstallHelpSeen') === 'true';
+  const [reservationData, setReservationData] = useState(() => {
+    const storedData = localStorage.getItem('reservationData');
+    if (!storedData) return null;
+
+    try {
+      return normalizeReservationData(JSON.parse(storedData));
+    } catch (err) {
+      console.error('Error parsing reservation data:', err);
+      return null;
+    }
+  });
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [showHouseManualModal, setShowHouseManualModal] = useState(false);
   const [showLocalGuideModal, setShowLocalGuideModal] = useState(false);
@@ -16,18 +69,113 @@ const GuestDashboard = () => {
   const [showTvModal, setShowTvModal] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(!isInstallBannerDismissed && !isStandaloneMode);
+  const [showInstallHelpModal, setShowInstallHelpModal] = useState(!isStandaloneMode && !isInstallBannerDismissed && !hasSeenInstallHelp);
 
   useEffect(() => {
-    // Load reservation data from localStorage
-    const storedData = localStorage.getItem('reservationData');
-    if (storedData) {
+    const refreshReservationData = async () => {
+      const bookingRef = localStorage.getItem('bookingRef');
+      if (!bookingRef) return;
+
       try {
-        setReservationData(JSON.parse(storedData));
-      } catch (err) {
-        console.error('Error parsing reservation data:', err);
+        const latestReservation = await getReservationByReference(bookingRef);
+        let normalizedReservation = normalizeReservationData(latestReservation);
+        if (!normalizedReservation) return;
+
+        const token = localStorage.getItem('token');
+
+        if (normalizedReservation.propertyId && (!normalizedReservation.propertyName || !normalizedReservation.address)) {
+          try {
+            const property = await getPropertyById({ token, propertyId: normalizedReservation.propertyId });
+            normalizedReservation = {
+              ...normalizedReservation,
+              propertyName: normalizedReservation.propertyName || property?.propertyName || '',
+              address: normalizedReservation.address || property?.address || '',
+              city: normalizedReservation.city || property?.city || '',
+              state: normalizedReservation.state || property?.state || '',
+              zip: normalizedReservation.zip || property?.zip || ''
+            };
+          } catch (error) {
+            console.warn('Unable to enrich property details for guest portal:', error);
+          }
+        }
+
+        if (normalizedReservation.customerId && (!normalizedReservation.firstName || !normalizedReservation.lastName)) {
+          try {
+            const guestResponse = await getUserById({ token, id: normalizedReservation.customerId });
+            const guestUser = guestResponse?.user || guestResponse;
+            normalizedReservation = {
+              ...normalizedReservation,
+              firstName: normalizedReservation.firstName || guestUser?.firstName || '',
+              lastName: normalizedReservation.lastName || guestUser?.lastName || '',
+              email: (() => {
+                const resolvedEmail = normalizedReservation.email || guestUser?.email || '';
+                return typeof resolvedEmail === 'string' && resolvedEmail.toLowerCase().includes('@guest.local') ? '' : resolvedEmail;
+              })(),
+              phoneNumber: normalizedReservation.phoneNumber || guestUser?.phoneNumber || ''
+            };
+          } catch (error) {
+            console.warn('Unable to enrich guest details for guest portal:', error);
+          }
+        }
+
+        setReservationData(normalizedReservation);
+        localStorage.setItem('reservationData', JSON.stringify(normalizedReservation));
+      } catch (error) {
+        console.error('Unable to refresh reservation details:', error);
       }
-    }
+    };
+
+    refreshReservationData();
   }, []);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event);
+      if (!isInstallBannerDismissed && !isStandaloneMode) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, [isInstallBannerDismissed, isStandaloneMode]);
+
+  const handleDismissInstallBanner = () => {
+    setShowInstallBanner(false);
+    localStorage.setItem('guestInstallBannerDismissed', 'true');
+    setIsInstallBannerDismissed(true);
+  };
+
+  const handleInstallApp = async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    try {
+      await deferredInstallPrompt.userChoice;
+    } catch (error) {
+      console.warn('Install prompt was dismissed or failed:', error);
+    }
+    setDeferredInstallPrompt(null);
+    setShowInstallBanner(false);
+    localStorage.setItem('guestInstallBannerDismissed', 'true');
+    setIsInstallBannerDismissed(true);
+  };
+
+  const handleShowInstallBannerAgain = () => {
+    localStorage.removeItem('guestInstallBannerDismissed');
+    setIsInstallBannerDismissed(false);
+    setShowInstallBanner(true);
+  };
+
+  const handleCloseInstallHelpModal = () => {
+    setShowInstallHelpModal(false);
+    localStorage.setItem('guestInstallHelpSeen', 'true');
+  };
 
   const handleCopyPassword = async () => {
     const wifiPassword = 'SylvanBeach2024!'; // The WiFi password
@@ -94,7 +242,7 @@ const GuestDashboard = () => {
         <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-black/60 flex flex-col sm:flex-row items-center justify-between px-4 sm:px-8 md:px-20 gap-2 sm:gap-4">
           <div className="text-center sm:text-left">
             <h1 className="text-2xl sm:text-4xl font-bold text-white mb-1 sm:mb-2">
-              Welcome {reservationData?.firstName}!
+              Welcome {reservationData?.firstName || 'Guest'}!
             </h1>
             <p className="text-xs sm:text-base text-pink-200 font-medium">to your Serenity on Sylvan Guest Portal</p>
           </div>
@@ -109,6 +257,104 @@ const GuestDashboard = () => {
 
       {/* 2. MATCHING CONTAINER: max-w-6xl like landing page */}
       <main className="max-w-6xl mx-auto px-3 sm:px-4 -mt-8 sm:-mt-10 relative z-10">
+        {showInstallBanner && (
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-pink-100 mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm sm:text-base font-bold text-gray-900">Add Guest Portal to your home screen</p>
+                <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                  {deferredInstallPrompt
+                    ? 'Install this app for one-tap access during your stay.'
+                    : isIOS
+                      ? 'In Safari, tap Share, then “Add to Home Screen”.'
+                      : 'Use your browser menu and choose “Install app” or “Add to Home Screen”.'}
+                </p>
+              </div>
+              <div className="flex gap-2 sm:gap-3">
+                {deferredInstallPrompt && (
+                  <button
+                    onClick={handleInstallApp}
+                    className="px-4 py-2 rounded-xl bg-pink-600 text-white text-sm font-semibold hover:bg-pink-700 transition-all"
+                  >
+                    Install
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowInstallHelpModal(true)}
+                  className="px-4 py-2 rounded-xl bg-pink-50 text-pink-700 text-sm font-semibold hover:bg-pink-100 transition-all"
+                >
+                  Show steps
+                </button>
+                <button
+                  onClick={handleDismissInstallBanner}
+                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-all"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showInstallHelpModal && createPortal(
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4" onClick={handleCloseInstallHelpModal}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full sm:max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-gradient-to-r from-pink-600 to-pink-700 text-white p-4 sm:p-6 flex items-center justify-between">
+                <h2 className="text-xl sm:text-2xl font-bold">Add to Home Screen</h2>
+                <button
+                  onClick={handleCloseInstallHelpModal}
+                  className="text-white hover:bg-pink-800 p-2 rounded-lg transition-all"
+                >
+                  <X size={20} className="sm:w-6 sm:h-6" />
+                </button>
+              </div>
+              <div className="p-4 sm:p-6 space-y-4 text-sm sm:text-base text-gray-800">
+                {deferredInstallPrompt ? (
+                  <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+                    <p className="font-semibold mb-2">Fastest way:</p>
+                    <p>Tap the <span className="font-bold">Install</span> button in the banner and confirm.</p>
+                  </div>
+                ) : isIOS ? (
+                  <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+                    <p className="font-semibold mb-2">iPhone (Safari):</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Tap the <span className="font-bold">Share</span> icon.</li>
+                      <li>Scroll and tap <span className="font-bold">Add to Home Screen</span>.</li>
+                      <li>Tap <span className="font-bold">Add</span>.</li>
+                    </ol>
+                  </div>
+                ) : isAndroid && isSamsungBrowser ? (
+                  <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+                    <p className="font-semibold mb-2">Samsung Internet:</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Tap the <span className="font-bold">menu (☰)</span>.</li>
+                      <li>Tap <span className="font-bold">Add page to</span>.</li>
+                      <li>Select <span className="font-bold">Home screen</span>.</li>
+                    </ol>
+                  </div>
+                ) : (
+                  <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+                    <p className="font-semibold mb-2">Android (Chrome):</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Tap the <span className="font-bold">menu (⋮)</span>.</li>
+                      <li>Tap <span className="font-bold">Install app</span> or <span className="font-bold">Add to Home screen</span>.</li>
+                      <li>Confirm the install.</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+              <div className="bg-gray-50 border-t border-gray-200 p-4 sm:p-5">
+                <button
+                  onClick={handleCloseInstallHelpModal}
+                  className="w-full bg-gray-900 text-white py-2.5 rounded-xl font-semibold hover:bg-gray-800 transition-all"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
         
         {/* RESERVATION INFO CARD */}
         {reservationData && (
@@ -127,14 +373,14 @@ const GuestDashboard = () => {
               <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-2xl p-4 sm:p-6 border border-pink-200 hover:shadow-lg transition-shadow">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-6">
                   <div className="flex-1">
-                    <h4 className="text-2xl font-bold text-gray-900 mb-3">{reservationData.propertyName}</h4>
+                    <h4 className="text-2xl font-bold text-gray-900 mb-3">{reservationData.propertyName || 'Property'}</h4>
                     <div className="space-y-2 text-gray-700">
-                      <p className="font-semibold">{reservationData.address}</p>
-                      <p>{reservationData.city}, {reservationData.state} {reservationData.zip}</p>
+                      <p className="font-semibold">{reservationData.address || 'Address unavailable'}</p>
+                      <p>{[reservationData.city, reservationData.state, reservationData.zip].filter(Boolean).join(' ') || 'Location unavailable'}</p>
                     </div>
                   </div>
                   <a 
-                    href={`https://www.google.com/maps/search/${encodeURIComponent(reservationData.address + ' ' + reservationData.city + ' ' + reservationData.state + ' ' + reservationData.zip)}`}
+                    href={`https://www.google.com/maps/search/${encodeURIComponent([reservationData.address, reservationData.city, reservationData.state, reservationData.zip].filter(Boolean).join(' '))}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 sm:gap-2 bg-pink-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-semibold hover:bg-pink-700 transition-all shadow-lg whitespace-nowrap h-fit !text-white"
@@ -155,10 +401,10 @@ const GuestDashboard = () => {
                 <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-In (3:00 pm)</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {new Date(reservationData.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {reservationData.checkInDate ? new Date(reservationData.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">
-                    {new Date(reservationData.checkInDate).toLocaleDateString('en-US', { weekday: 'short' })}
+                    {reservationData.checkInDate ? new Date(reservationData.checkInDate).toLocaleDateString('en-US', { weekday: 'short' }) : ''}
                   </p>
                 </div>
 
@@ -166,17 +412,17 @@ const GuestDashboard = () => {
                 <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-Out (10:00 am)</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {reservationData.checkoutDate ? new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">
-                    {new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { weekday: 'short' })}
+                    {reservationData.checkoutDate ? new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { weekday: 'short' }) : ''}
                   </p>
                 </div>
 
                 {/* Lock Code */}
                 <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Lock Code</p>
-                  <p className="text-2xl font-bold text-gray-900 font-mono tracking-wider">{reservationData.lockCode.trim()}</p>
+                  <p className="text-2xl font-bold text-gray-900 font-mono tracking-wider">{reservationData.lockCode ? reservationData.lockCode.toString().trim() : 'N/A'}</p>
                   <p className="text-xs text-gray-600 mt-1">Required for entry</p>
                 </div>
               </div>
@@ -191,8 +437,8 @@ const GuestDashboard = () => {
                 {/* Guest Name */}
                 <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Guest Name</p>
-                  <p className="text-xl font-bold text-gray-900">{reservationData.firstName}</p>
-                  <p className="text-lg font-bold text-gray-800">{reservationData.lastName}</p>
+                  <p className="text-xl font-bold text-gray-900">{reservationData.firstName || 'Guest'}</p>
+                  <p className="text-lg font-bold text-gray-800">{reservationData.lastName || ''}</p>
                 </div>
 
                 {/* Guest Count */}
@@ -207,6 +453,16 @@ const GuestDashboard = () => {
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Dogs</p>
                   <p className="text-2xl font-bold text-gray-900">{reservationData.dogs}</p>
                   <p className="text-xs text-gray-600 mt-1">in your party</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Email</p>
+                  <p className="text-base font-semibold text-gray-900 break-all">{reservationData.email || 'N/A'}</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Phone</p>
+                  <p className="text-base font-semibold text-gray-900">{reservationData.phoneNumber || 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -237,7 +493,17 @@ const GuestDashboard = () => {
         </div>
 
         {/* 4. DASHBOARD GRID: Matches the 4-column layout of your gallery */}
-        <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6 text-gray-800 px-2">Guest Essentials</h2>
+        <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6 px-2">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800">Guest Essentials</h2>
+          {!showInstallBanner && isInstallBannerDismissed && !isStandaloneMode && (
+            <button
+              onClick={handleShowInstallBannerAgain}
+              className="text-xs sm:text-sm font-semibold text-pink-600 hover:text-pink-700 hover:underline transition-all"
+            >
+              Show install tip again
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <DashCard 
             icon={<BookOpen />} 
