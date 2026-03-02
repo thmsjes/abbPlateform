@@ -115,6 +115,7 @@ const OwnerDashboard = () => {
   };
   const [reservationForm, setReservationForm] = useState({
     confirmationNumber: '',
+    reservationFrom: 'ABB',
     customerId: '',
     propertyId: '',
     checkInDate: '',
@@ -205,6 +206,75 @@ const OwnerDashboard = () => {
   const [editingReview, setEditingReview] = useState(null);
   const [reviewFormData, setReviewFormData] = useState({ reviewerName: '', reviewText: '', score: '', reviewDate: '' });
 
+  const normalizeReviewsResponse = (reviewsResponse) => {
+    if (Array.isArray(reviewsResponse)) return reviewsResponse;
+    if (Array.isArray(reviewsResponse?.reviews)) return reviewsResponse.reviews;
+    if (Array.isArray(reviewsResponse?.data)) return reviewsResponse.data;
+    if (Array.isArray(reviewsResponse?.result)) return reviewsResponse.result;
+    return [];
+  };
+
+  const normalizeUsersResponse = (usersResponse) => {
+    if (Array.isArray(usersResponse)) return usersResponse;
+    if (Array.isArray(usersResponse?.users)) return usersResponse.users;
+    if (Array.isArray(usersResponse?.data)) return usersResponse.data;
+    if (Array.isArray(usersResponse?.result)) return usersResponse.result;
+    return [];
+  };
+
+  const mapStaffUsers = (usersResponse) => {
+    return normalizeUsersResponse(usersResponse)
+      .map(user => {
+        const access = parseInt(user?.access ?? user?.accessLevel, 10);
+        const role = access === 2 ? 'Cleaner' : access === 3 ? 'Maintenance' : 'Staff';
+
+        return {
+          id: user.id,
+          username: user.username || '',
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown',
+          email: user.email || '',
+          role,
+          access,
+          cleaner: access === 2,
+          maintenance: access === 3,
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
+          phoneNumber: user.phoneNumber || '',
+          company: user.company || '',
+          address: user.address || '',
+          city: user.city || '',
+          state: user.state || '',
+          zip: user.zip || '',
+          notes: user.notes || ''
+        };
+      })
+      .filter(user => user.access === 2 || user.access === 3);
+  };
+
+  const fetchReviewsByProperty = useCallback(async (propertyIdValue = selectedPropertyId) => {
+    if (!propertyIdValue) {
+      setReviews([]);
+      return;
+    }
+
+    try {
+      setLoadingReviews(true);
+      const token = localStorage.getItem('token');
+      const parsedPropertyId = parseInt(propertyIdValue, 10);
+      const resolvedPropertyId = Number.isNaN(parsedPropertyId) ? propertyIdValue : parsedPropertyId;
+
+      const reviewsData = await getReviewsByPropertyId({ token, propertyId: resolvedPropertyId });
+      const reviewsArray = normalizeReviewsResponse(reviewsData);
+      setReviews(reviewsArray);
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+      setReviews([]);
+      showNotification('Failed to fetch reviews', 'error');
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [selectedPropertyId]);
+
   // State for notifications/toasts
   const [notification, setNotification] = useState(null);
   
@@ -283,9 +353,9 @@ const OwnerDashboard = () => {
     
     return [
       { label: 'Total Revenue', value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign, color: 'text-green-600', bg: 'bg-green-100' },
-      { label: 'Active Reservations', value: activeReservations.toString(), icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100' },
-      { label: 'Active Staff', value: activeStaff.toString(), icon: Users, color: 'text-orange-600', bg: 'bg-orange-100' },
-      { label: 'Unpaid Invoices', value: unpaidCount.toString(), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100' },
+      { label: 'Active Reservations', value: String(activeReservations ?? 0), icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100' },
+      { label: 'Active Staff', value: String(activeStaff ?? 0), icon: Users, color: 'text-orange-600', bg: 'bg-orange-100' },
+      { label: 'Unpaid Invoices', value: String(unpaidCount ?? 0), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100' },
     ];
   };
 
@@ -313,31 +383,7 @@ const OwnerDashboard = () => {
         // Refresh staff list
         if (selectedPropertyId) {
           const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
-          if (staffData && Array.isArray(staffData)) {
-            const mappedStaff = staffData
-              .filter(user => {
-                const access = parseInt(user.access);
-                return access !== 1 && access !== 4;
-              })
-              .map(user => ({
-                id: user.id,
-                username: user.username || '',
-                name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown',
-                email: user.email || '',
-                role: parseInt(user.access) === 2 ? 'Cleaner' : 'Maintenance',
-                access: user.access,
-                firstName: user.firstName || '',
-                lastName: user.lastName || '',
-                phoneNumber: user.phoneNumber || '',
-                company: user.company || '',
-                address: user.address || '',
-                city: user.city || '',
-                state: user.state || '',
-                zip: user.zip || '',
-                notes: user.notes || ''
-              }));
-            setStaffList(mappedStaff);
-          }
+          setStaffList(mapStaffUsers(staffData));
         }
       }
     } catch (error) {
@@ -409,21 +455,7 @@ const OwnerDashboard = () => {
         // Refresh staff list
         if (selectedPropertyId) {
           const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
-          if (staffData && Array.isArray(staffData)) {
-            const mappedStaff = staffData
-              .filter(user => {
-                const access = parseInt(user.access);
-                return access !== 1 && access !== 4;
-              })
-              .map(user => {
-                const access = parseInt(user.access);
-                let role = 'Staff';
-                if (access === 2) role = 'Cleaner';
-                else if (access === 3) role = 'Maintenance';
-                return { id: user.id, username: user.username || '', name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown', email: user.email || '', role, access, firstName: user.firstName || '', lastName: user.lastName || '', phoneNumber: user.phoneNumber || '', company: user.company || '', address: user.address || '', city: user.city || '', state: user.state || '', zip: user.zip || '', notes: user.notes || '' };
-              });
-            setStaffList(mappedStaff);
-          }
+          setStaffList(mapStaffUsers(staffData));
         }
       }
     } catch (error) {
@@ -443,7 +475,7 @@ const OwnerDashboard = () => {
       const staffData = {
         id: editingEmployee.id,
         username: editingEmployee.username || '',
-        access: editingEmployee.access.toString(),
+        access: String(editingEmployee.access ?? ''),
         firstName: editStaffForm.firstName,
         lastName: editStaffForm.lastName,
         email: editStaffForm.email,
@@ -489,21 +521,7 @@ const OwnerDashboard = () => {
         // Refresh staff list
         if (selectedPropertyId) {
           const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
-          if (staffData && Array.isArray(staffData)) {
-            const mappedStaff = staffData
-              .filter(user => {
-                const access = parseInt(user.access);
-                return access !== 1 && access !== 4;
-              })
-              .map(user => {
-                const access = parseInt(user.access);
-                let role = 'Staff';
-                if (access === 2) role = 'Cleaner';
-                else if (access === 3) role = 'Maintenance';
-                return { id: user.id, username: user.username || '', name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown', email: user.email || '', role, access, firstName: user.firstName || '', lastName: user.lastName || '', phoneNumber: user.phoneNumber || '', company: user.company || '', address: user.address || '', city: user.city || '', state: user.state || '', zip: user.zip || '', notes: user.notes || '' };
-              });
-            setStaffList(mappedStaff);
-          }
+          setStaffList(mapStaffUsers(staffData));
         }
       } else {
         alert('Failed to update staff member: ' + response.data.message);
@@ -617,6 +635,7 @@ const OwnerDashboard = () => {
       setEditingReservation(null);
       setReservationForm({
         confirmationNumber: registerPayload.confirmationNumber || '',
+        reservationFrom: 'ABB',
         customerId: guestId.toString(),
         propertyId: resolvedPropertyId,
         checkInDate: '',
@@ -654,6 +673,7 @@ const OwnerDashboard = () => {
     setEditingReservation(reservation);
     setReservationForm({
       confirmationNumber: reservation.confirmationNumber?.toString() || '',
+      reservationFrom: reservation.reservationFrom || reservation.reservationSource || 'ABB',
       customerId: reservation.customerId?.toString() || '',
       propertyId: reservation.propertyId || selectedPropertyId || '',
       checkInDate: reservation.checkIn || '',
@@ -717,13 +737,14 @@ const OwnerDashboard = () => {
         return;
       }
 
-      const normalizedCleaningDateTime = reservationForm.cleaningDateTime?.toString().trim() || reservationForm.checkInDate;
+      const normalizedCleaningDateTime = String(reservationForm.cleaningDateTime ?? '').trim() || reservationForm.checkInDate;
       
       if (editingReservation) {
         // Update reservation
         const updateData = {
           id: editingReservation.id,
           confirmationNumber: reservationForm.confirmationNumber,
+          reservationFrom: String(reservationForm.reservationFrom ?? 'ABB').trim() || 'ABB',
           customerId: resolvedCustomerId,
           propertyId: resolvedPropertyId,
           checkInDate: reservationForm.checkInDate,
@@ -746,6 +767,7 @@ const OwnerDashboard = () => {
             ? { 
                 ...r, 
                 confirmationNumber: reservationForm.confirmationNumber,
+                reservationFrom: reservationForm.reservationFrom,
                 customerId: reservationForm.customerId,
                 checkIn: reservationForm.checkInDate, 
                 checkOut: reservationForm.checkoutDate,
@@ -760,13 +782,14 @@ const OwnerDashboard = () => {
       } else {
         // Create new reservation
         const createData = {
-          confirmationNumber: reservationForm.confirmationNumber?.toString().trim(),
+          confirmationNumber: String(reservationForm.confirmationNumber ?? '').trim(),
+          reservationFrom: String(reservationForm.reservationFrom ?? 'ABB').trim() || 'ABB',
           customerId: resolvedCustomerId,
           propertyId: resolvedPropertyId,
           staffId: resolvedStaffId,
           checkInDate: reservationForm.checkInDate,
           checkoutDate: reservationForm.checkoutDate,
-          lockCode: reservationForm.lockCode?.toString().trim(),
+          lockCode: String(reservationForm.lockCode ?? '').trim(),
           cleaningDateTime: normalizedCleaningDateTime,
           guestCount: parseInt(reservationForm.numberOfGuests, 10) || 0,
           dogs: reservationForm.hasDogs === true || reservationForm.hasDogs === 'yes'
@@ -786,6 +809,7 @@ const OwnerDashboard = () => {
           checkIn: reservationForm.checkInDate,
           checkOut: reservationForm.checkoutDate,
           confirmationNumber: reservationForm.confirmationNumber,
+          reservationFrom: reservationForm.reservationFrom,
           customerId: reservationForm.customerId,
           lockCode: reservationForm.lockCode,
           staffId: reservationForm.staffId,
@@ -1212,47 +1236,31 @@ const OwnerDashboard = () => {
         try {
           const token = localStorage.getItem('token');
           if (!token) return;
+          const { firstDay, lastDay } = getMonthDateRange();
+          const expensesAttributes = {
+            StartDate: firstDay.toISOString().split('T')[0],
+            EndDate: lastDay.toISOString().split('T')[0],
+            Category: currentFilters?.category || null,
+            PropertyId: parseInt(selectedPropertyId, 10)
+          };
 
-          // Decode JWT to get property IDs
-          const decoded = jwtDecode(token);
-          const propertyIds = decoded['PropertyId']; // Adjust this key based on your JWT structure
-
-          if (propertyIds && Array.isArray(propertyIds)) {
-            // Fetch each property - convert string IDs to integers and preserve the ID
-            const properties = await Promise.all(
-              propertyIds.map(async (id) => {
-                const property = await getPropertyById({ token, propertyId: parseInt(id, 10) });
-                return {
-                  ...property,
-                  id: parseInt(id, 10) // Store the original ID that came from JWT
-                };
-              })
-            );
-            setPropertiesList(properties);
-          } else if (propertyIds && typeof propertyIds === 'string') {
-            // If single property ID - convert to integer
-            const propertyId = parseInt(propertyIds, 10);
-            const property = await getPropertyById({ token, propertyId });
-            setPropertiesList([{
-              ...property,
-              id: propertyId
-            }]);
-          }
+          const expenses = await getExpenses({ token, attributes: expensesAttributes });
+          setExpensesData(Array.isArray(expenses) ? expenses : []);
         } catch (error) {
-          console.error('Failed to fetch properties:', error);
-          setPropertiesList([]);
+          console.error('Failed to fetch expenses:', error);
+          setExpensesData([]);
         } finally {
-          setLoadingProperties(false);
+          setLoadingExpenses(false);
         }
       };
 
       fetchExpenses();
     }
-  }, [activeView, selectedPropertyId, selectedPropertyDetails?.propertyName]);
+  }, [activeView, selectedPropertyId, currentFilters?.category]);
 
-  // Fetch dashboard data when selectedPropertyId changes or activeView is dashboard
+  // Fetch dashboard data when selectedPropertyId changes or activeView is dashboard/properties/staff
   useEffect(() => {
-    if ((activeView === 'dashboard' || activeView === 'properties') && selectedPropertyId) {
+    if ((activeView === 'dashboard' || activeView === 'properties' || activeView === 'staff') && selectedPropertyId) {
       const fetchDashboardData = async () => {
         try {
           const token = localStorage.getItem('token');
@@ -1293,6 +1301,7 @@ const OwnerDashboard = () => {
               return {
                 id: res.id,
                 confirmationNumber: res.confirmationNumber,
+                reservationFrom: res.reservationFrom || res.reservationSource || 'ABB',
                 customerId: res.customerId,
                 guest: guestName,
                 guestUser: guestUser,
@@ -1312,30 +1321,7 @@ const OwnerDashboard = () => {
 
           // Fetch staff (filter out guests - access codes 1 and 4)
           const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
-          if (staffData && Array.isArray(staffData)) {
-            const mappedStaff = staffData
-              .filter(user => {
-                const access = parseInt(user.access);
-                return access !== 1 && access !== 4;
-              })
-              .map(user => ({
-                id: user.id,
-                username: user.username || '',
-                name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown',
-                email: user.email || '',
-                company: user.company || '',
-                phoneNumber: user.phoneNumber || '',
-                address: user.address || '',
-                city: user.city || '',
-                state: user.state || '',
-                zip: user.zip || '',
-                notes: user.notes || '',
-                access: user.access || 0,
-                cleaner: parseInt(user.access) === 2 || parseInt(user.access) === 5,
-                maintenance: parseInt(user.access) === 3 || parseInt(user.access) === 6
-              }));
-            setStaffList(mappedStaff);
-          }
+          setStaffList(mapStaffUsers(staffData));
 
           // Fetch expenses
           const { firstDay, lastDay } = getMonthDateRange();
@@ -1353,6 +1339,26 @@ const OwnerDashboard = () => {
       fetchDashboardData();
     }
   }, [activeView, selectedPropertyId, selectedPropertyDetails?.propertyName]);
+
+  // Fetch staff specifically when Staff view is opened
+  useEffect(() => {
+    if (activeView === 'staff' && selectedPropertyId) {
+      const fetchStaffData = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) return;
+
+          const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
+          setStaffList(mapStaffUsers(staffData));
+        } catch (error) {
+          console.error('Error fetching staff data:', error);
+          setStaffList([]);
+        }
+      };
+
+      fetchStaffData();
+    }
+  }, [activeView, selectedPropertyId]);
 
   // Fetch properties on component mount
   useEffect(() => {
@@ -1522,40 +1528,7 @@ const OwnerDashboard = () => {
 
           // Fetch staff by property
           const staffData = await getUsersByPropertyId({ token, propertyId: selectedPropertyId });
-          if (staffData && Array.isArray(staffData)) {
-            // Map staff by access level: 2 = Cleaner, 3 = Maintenance
-            // Filter out access 1 (owner) and 4 (customer)
-            const mappedStaff = staffData
-              .filter(user => {
-                const access = parseInt(user.access);
-                return access !== 1 && access !== 4;
-              })
-              .map(user => {
-                const access = parseInt(user.access);
-                let role = 'Staff';
-                if (access === 2) role = 'Cleaner';
-                else if (access === 3) role = 'Maintenance';
-                
-                return {
-                  id: user.id,
-                  username: user.username || '',
-                  name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown',
-                  email: user.email || '',
-                  role: role,
-                  access: access,
-                  firstName: user.firstName || '',
-                  lastName: user.lastName || '',
-                  phoneNumber: user.phoneNumber || '',
-                  company: user.company || '',
-                  address: user.address || '',
-                  city: user.city || '',
-                  state: user.state || '',
-                  zip: user.zip || '',
-                  notes: user.notes || ''
-                };
-              });
-            setStaffList(mappedStaff);
-          }
+          setStaffList(mapStaffUsers(staffData));
         } catch (error) {
           console.error('Failed to fetch reservations, events, and staff:', error);
           // Keep using mock data if API fails
@@ -1596,33 +1569,10 @@ const OwnerDashboard = () => {
 
   // Fetch reviews when activeView changes to 'reviews'
   useEffect(() => {
-    if (activeView === 'reviews' && selectedPropertyId) {
-      const fetchReviews = async () => {
-        try {
-          setLoadingReviews(true);
-          const token = localStorage.getItem('token');
-          const reviewsData = await getReviewsByPropertyId({ token, propertyId: selectedPropertyId });
-          console.log('Reviews API Response:', reviewsData);
-          // Handle the response structure with isSuccess and reviews array
-          let reviewsArray = [];
-          if (reviewsData?.reviews && Array.isArray(reviewsData.reviews)) {
-            reviewsArray = reviewsData.reviews;
-          } else if (Array.isArray(reviewsData)) {
-            reviewsArray = reviewsData;
-          }
-          console.log('Final reviews array:', reviewsArray);
-          setReviews(reviewsArray);
-        } catch (error) {
-          console.error('Error fetching reviews:', error);
-          setReviews([]);
-          showNotification('Failed to fetch reviews', 'error');
-        } finally {
-          setLoadingReviews(false);
-        }
-      };
-      fetchReviews();
+    if (activeView === 'reviews') {
+      fetchReviewsByProperty(selectedPropertyId);
     }
-  }, [activeView, selectedPropertyId]);
+  }, [activeView, selectedPropertyId, fetchReviewsByProperty]);
 
   // Helper function to get staff info by ID
   const getStaffInfoById = (staffId) => {
@@ -1639,7 +1589,7 @@ const OwnerDashboard = () => {
     setSelectedInvoice(invoice);
     setEditInvoiceForm({
       company: staffInfo?.company || '',
-      staffName: invoice.staffId.toString() || '',
+      staffName: String(invoice?.staffId ?? ''),
       issueCreatedDate: invoice.dateCreated ? invoice.dateCreated.split('T')[0] : '',
       addressDate: invoice.dateCompleted ? invoice.dateCompleted.split('T')[0] : '',
       description: invoice.repairDescription || '',
@@ -1951,17 +1901,7 @@ const OwnerDashboard = () => {
       }
       
       // Refresh reviews list
-      const reviewsData = await getReviewsByPropertyId({ token, propertyId: selectedPropertyId });
-      console.log('Refreshed reviews data:', reviewsData);
-      // Handle the response structure with isSuccess and reviews array
-      let reviewsArray = [];
-      if (reviewsData?.reviews && Array.isArray(reviewsData.reviews)) {
-        reviewsArray = reviewsData.reviews;
-      } else if (Array.isArray(reviewsData)) {
-        reviewsArray = reviewsData;
-      }
-      console.log('Final refreshed reviews array:', reviewsArray);
-      setReviews(reviewsArray);
+      await fetchReviewsByProperty(selectedPropertyId);
       
       // Reset form
       setReviewFormData({ reviewerName: '', reviewText: '', score: '', reviewDate: '' });
@@ -1995,8 +1935,7 @@ const OwnerDashboard = () => {
           showNotification('Review deleted successfully', 'success');
           
           // Refresh reviews list
-          const reviewsData = await getReviewsByPropertyId({ token, propertyId: selectedPropertyId });
-          setReviews(Array.isArray(reviewsData) ? reviewsData : []);
+          await fetchReviewsByProperty(selectedPropertyId);
         } catch (error) {
           console.error('Error deleting review:', error);
           showNotification('Failed to delete review', 'error');
@@ -3138,6 +3077,7 @@ const OwnerDashboard = () => {
                             {res.guest}
                           </button>
                           <p className="text-sm text-gray-500 mt-1">{res.property}</p>
+                          <p className="text-sm text-gray-500 mt-1">Reservation From: {res.reservationFrom || 'ABB'}</p>
                           <p className="text-sm text-gray-500 mt-1">{res.checkIn} - {res.checkOut}</p>
                           <div className="flex gap-3 mt-4">
                             <button onClick={() => openEditReservationModal(res)} className="flex-1 px-3 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all">Edit</button>
@@ -3153,6 +3093,7 @@ const OwnerDashboard = () => {
                           <tr>
                             <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Guest</th>
                             <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Property</th>
+                            <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Reservation From</th>
                             <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Dates</th>
                             <th className="p-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Actions</th>
                           </tr>
@@ -3176,6 +3117,7 @@ const OwnerDashboard = () => {
                                 </button>
                               </td>
                               <td className="p-6 text-sm text-gray-500">{res.property}</td>
+                              <td className="p-6 text-sm text-gray-500">{res.reservationFrom || 'ABB'}</td>
                               <td className="p-6 text-sm text-gray-500">{res.checkIn} - {res.checkOut}</td>
                               <td className="p-6" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex justify-center gap-3">
@@ -4426,6 +4368,11 @@ const OwnerDashboard = () => {
               </div>
 
               <div className="border-b border-slate-200 pb-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Reservation From</p>
+                <p className="text-lg text-slate-700">{selectedReservationDetails.reservationFrom || 'ABB'}</p>
+              </div>
+
+              <div className="border-b border-slate-200 pb-4">
                 <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Check-in Date</p>
                 <p className="text-lg text-slate-700">{(() => {
                   const checkIn = selectedReservationDetails.checkIn;
@@ -4628,6 +4575,19 @@ function ReservationModal({ show, isEditing, formData, guestPreview, onFormChang
               placeholder="Confirmation #"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Reservation From</label>
+            <select
+              value={formData.reservationFrom || 'ABB'}
+              onChange={(e) => onFormChange('reservationFrom', e.target.value)}
+              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 text-gray-900"
+            >
+              <option value="ABB">ABB</option>
+              <option value="VBO">VBO</option>
+              <option value="Direct Booking">Direct Booking</option>
+            </select>
           </div>
 
           <div>

@@ -1,5 +1,10 @@
 import axios from 'axios';
 
+axios.defaults.headers.post['Content-Type'] = 'application/json';
+axios.defaults.headers.put['Content-Type'] = 'application/json';
+axios.defaults.headers.patch['Content-Type'] = 'application/json';
+axios.defaults.headers.common.Accept = 'application/json';
+
 export const register = async (userData) => {
   try {
     const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/register`, userData);
@@ -26,15 +31,40 @@ export const login = async (credentials) => {
 
 export const getExpenses = async ({token, attributes}) => {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/expenseByAttribute`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      params: attributes
-    });
+    if (!token) {
+      throw new Error('Missing auth token for expense request');
+    }
+
+    const rawPropertyId = attributes?.PropertyId ?? attributes?.propertyId;
+    const parsedPropertyId = parseInt(rawPropertyId, 10);
+    if (Number.isNaN(parsedPropertyId) || parsedPropertyId <= 0) {
+      throw new Error('Invalid PropertyId for expense request');
+    }
+
+    const startDate = attributes?.startDate || attributes?.StartDate || attributes?.dateFrom || '';
+    const endDate = attributes?.endDate || attributes?.EndDate || attributes?.dateTo || '';
+    const category = attributes?.category || attributes?.Category || '';
+
+    const payload = {
+      startDate,
+      endDate,
+      category,
+      propertyId: parsedPropertyId
+    };
+
+    const url = `${import.meta.env.VITE_API_URL_BASE}/api/expenseByAttribute`;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    };
+
+    const response = await axios.post(url, payload, { headers });
     
     // Transform data: expenses are negative, payments are positive
-    const expenses = response.data.expenses || [];
+    const expenses = Array.isArray(response.data)
+      ? response.data
+      : (response.data.expenses || response.data.data || []);
     return expenses.map(item => ({
       ...item,
       amount: item.expense ? -Math.abs(item.amount) : Math.abs(item.amount)
@@ -113,7 +143,15 @@ export const createProperty = async ({ token, propertyData }) => {
 
 export const createExpense = async ({ token, expenseData }) => {
   try {
-    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/expense`, expenseData, {
+    const payload = {
+      description: expenseData?.description || '',
+      amount: Number(expenseData?.amount || 0),
+      date: expenseData?.date,
+      category: expenseData?.category || '',
+      propertyId: Number(expenseData?.propertyId || 0)
+    };
+
+    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/expense`, payload, {
       headers: {
         Authorization: `Bearer ${token}`
       }
@@ -127,10 +165,32 @@ export const createExpense = async ({ token, expenseData }) => {
 
 export const addMileage = async ({ token, mileageData }) => {
   try {
-    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/addMileage`, mileageData, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+    const parsedMileage = Number(mileageData?.mileage || 0);
+    const parsedPropertyId = parseInt(mileageData?.propertyId, 10);
+
+    if (Number.isNaN(parsedPropertyId) || parsedPropertyId <= 0) {
+      throw new Error('Invalid propertyId for mileage request');
+    }
+
+    const payload = {
+      mileage: Number.isNaN(parsedMileage) ? 0 : parsedMileage,
+      description: mileageData?.description || '',
+      dateTimeInserted: mileageData?.dateTimeInserted || new Date().toISOString(),
+      propertyId: parsedPropertyId,
+      date: mileageData?.date || new Date().toISOString().split('T')[0]
+    };
+
+    const headers = {
+      Accept: '*/*',
+      'Content-Type': 'application/json'
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await axios.post(`${import.meta.env.VITE_API_URL_BASE}/api/mileage`, payload, {
+      headers
     });
     return response.data;
   } catch (error) {
@@ -141,13 +201,21 @@ export const addMileage = async ({ token, mileageData }) => {
 
 export const getMileage = async ({ token, propertyId }) => {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getMileage`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      params: {
-        propertyId: propertyId
-      }
+    const parsedPropertyId = parseInt(propertyId, 10);
+    if (Number.isNaN(parsedPropertyId) || parsedPropertyId <= 0) {
+      throw new Error('Invalid propertyId for mileage request');
+    }
+
+    const headers = {
+      Accept: '*/*'
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getMileage/${parsedPropertyId}`, {
+      headers
     });
     
     // API returns the array directly, or wrapped in .mileages or .data
@@ -392,6 +460,31 @@ export const deleteTransaction = async ({token, id}) => {
   }
 };
 
+export const deleteMileage = async ({ token, mileageId }) => {
+  try {
+    const parsedMileageId = parseInt(mileageId, 10);
+    if (Number.isNaN(parsedMileageId) || parsedMileageId <= 0) {
+      throw new Error('Invalid mileageId for delete request');
+    }
+
+    const headers = {
+      Accept: '*/*'
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await axios.delete(`${import.meta.env.VITE_API_URL_BASE}/api/deleteMileage/${parsedMileageId}`, {
+      headers
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting mileage:', error);
+    throw error;
+  }
+};
+
 export const getReservationByReference = async (bookingReference) => {
   try {
     const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getAllReservationsByReference`, {
@@ -409,12 +502,9 @@ export const getReservationByReference = async (bookingReference) => {
 // Review API Calls
 export const getReviewsByPropertyId = async ({ token, propertyId }) => {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getReviewsByPropertyId`, {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL_BASE}/api/getReviewsByPropertyId/${propertyId}`, {
       headers: {
         Authorization: `Bearer ${token}`
-      },
-      params: {
-        propertyId: propertyId
       }
     });
     return response.data;
@@ -469,14 +559,12 @@ export const updateReview = async ({ token, reviewData }) => {
   }
 };
 
-export const deleteReview = async ({ token, reviewId }) => {
+export const deleteReview = async ({ token, reviewId, id }) => {
   try {
-    const response = await axios.delete(`${import.meta.env.VITE_API_URL_BASE}/api/deleteReview`, {
+    const resolvedReviewId = reviewId ?? id;
+    const response = await axios.delete(`${import.meta.env.VITE_API_URL_BASE}/api/deleteReview/${resolvedReviewId}`, {
       headers: {
         Authorization: `Bearer ${token}`
-      },
-      params: {
-        reviewId: reviewId
       }
     });
     return response.data;

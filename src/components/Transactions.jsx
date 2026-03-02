@@ -3,7 +3,7 @@ import { Plus, Search, Filter, ArrowUpRight, ArrowDownLeft, Trash2, X, Calendar 
 import * as XLSX from 'xlsx';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { createExpense, addMileage, getMileage, deleteTransaction } from '../apiCalls';
+import { createExpense, addMileage, getMileage, deleteTransaction, deleteMileage } from '../apiCalls';
 
 const TransactionModal = ({ onClose, onSave }) => {
   const [formData, setFormData] = useState({
@@ -353,11 +353,6 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
       return;
     }
 
-    const activeFilters = passedFilters || filters;
-    const dateRangeText = activeFilters.dateFrom && activeFilters.dateTo 
-      ? `${new Date(activeFilters.dateFrom).toLocaleDateString()} - ${new Date(activeFilters.dateTo).toLocaleDateString()}`
-      : 'All Dates';
-
     // Prepare data for Excel
     const excelData = data.map(t => ({
       'Date': new Date(t.date).toLocaleDateString(),
@@ -427,14 +422,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
     XLSX.writeFile(workbook, filename);
   };
   
-  // Use initialData if provided, otherwise use mock data
-  const defaultData = [
-    { id: 1, date: '2026-01-10', description: 'Unit 4B Cleaning Fee', amount: -150.00, type: 'Expense', category: 'Maintenance' },
-    { id: 2, date: '2026-01-09', description: 'Monthly Rent - Unit 2A', amount: 2400.00, type: 'Payment', category: 'Rent' },
-    { id: 3, date: '2026-01-08', description: 'Plumbing Repair - Unit 1C', amount: -320.50, type: 'Expense', category: 'Repair' },
-  ];
-
-  const [transactions, setTransactions] = useState(initialData.length > 0 ? initialData : defaultData);
+  const [transactions, setTransactions] = useState(Array.isArray(initialData) ? initialData : []);
   const [mileageData, setMileageData] = useState([]);
 
   // Get unique categories
@@ -492,6 +480,40 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
     });
   };
 
+  const getMileageRecordId = (record) => {
+    return (
+      record?.id ??
+      record?.mileageId ??
+      record?.mileageID ??
+      record?.mileageRecordId ??
+      record?.MileageRecordId ??
+      record?.Id
+    );
+  };
+
+  const fetchMileageData = async () => {
+    if (!propertyDetails?.id) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const mileages = await getMileage({ token, propertyId: propertyDetails.id });
+
+      const mileageTransactions = (mileages || []).map((m, index) => ({
+        id: getMileageRecordId(m) ?? `mileage_${index}`,
+        date: m.date,
+        description: m.description,
+        mileage: m.mileage,
+        type: 'Mileage',
+        category: 'Mileage',
+        amount: 0
+      }));
+
+      setMileageData(mileageTransactions);
+    } catch (error) {
+      console.error('Error fetching mileage:', error);
+    }
+  };
+
   // Handle delete transaction
   const handleDeleteTransaction = async (transactionId) => {
     if (window.confirm('Are you sure you want to delete this transaction?')) {
@@ -509,6 +531,23 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
     }
   };
 
+  const handleDeleteMileage = async (mileageId) => {
+    try {
+      const parsedMileageId = parseInt(mileageId, 10);
+      if (Number.isNaN(parsedMileageId) || parsedMileageId <= 0) {
+        console.warn('Mileage entry does not have a valid server ID yet. Refresh mileage data and try again.');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      await deleteMileage({ token, mileageId: parsedMileageId });
+
+      setMileageData((prev) => prev.filter((m) => parseInt(m.id, 10) !== parsedMileageId));
+    } catch (error) {
+      console.error('Error deleting mileage:', error);
+    }
+  };
+
   // Handle saving new transaction
   const handleSaveTransaction = async (newTx) => {
     try {
@@ -520,8 +559,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
         amount: Math.abs(newTx.amount),
         date: newTx.date,
         category: newTx.category,
-        propertyId: parseInt(propertyDetails?.id || 0),
-        paymentType: newTx.paymentType || 'Other'
+        propertyId: parseInt(propertyDetails?.id || propertyDetails?.propertyId || 0, 10)
       };
       
       await createExpense({ token, expenseData });
@@ -546,15 +584,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
       };
       
       await addMileage({ token, mileageData: mileageEntry });
-      
-      // Add to mileage data
-      setMileageData([{ 
-        id: Date.now(), 
-        ...mileageEntry,
-        type: 'Mileage',
-        category: 'Mileage',
-        amount: 0
-      }, ...mileageData]);
+      await fetchMileageData();
     } catch (error) {
       console.error('Error saving mileage:', error);
       alert('Failed to save mileage entry');
@@ -563,31 +593,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
 
   // Fetch mileage when component mounts or property changes
   useEffect(() => {
-    const fetchMileage = async () => {
-      try {
-        if (propertyDetails?.id) {
-          const token = localStorage.getItem('token');
-          const mileages = await getMileage({ token, propertyId: propertyDetails.id });
-          
-          // Transform mileage data to match transaction format
-          const mileageTransactions = (mileages || []).map((m, index) => ({
-            id: m.id || `mileage_${index}_${Date.now()}`,
-            date: m.date,
-            description: m.description,
-            mileage: m.mileage,
-            type: 'Mileage',
-            category: 'Mileage',
-            amount: 0
-          }));
-          
-          setMileageData(mileageTransactions);
-        }
-      } catch (error) {
-        console.error('Error fetching mileage:', error);
-      }
-    };
-    
-    fetchMileage();
+    fetchMileageData();
   }, [propertyDetails?.id]);
 
   return (
@@ -1014,7 +1020,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
                     <td className="px-8 py-4 text-right font-bold text-blue-600">{t.mileage || '0'} miles</td>
                     <td className="px-8 py-4 text-center">
                       <button 
-                        onClick={() => setTransactions(transactions.filter(tx => tx.id !== t.id))}
+                        onClick={() => handleDeleteMileage(t.id)}
                         style={{
                           backgroundColor: '#ef4444',
                           color: 'white',
@@ -1058,7 +1064,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
                     {t.mileage || '0'} miles
                   </span>
                   <button 
-                    onClick={() => setTransactions(transactions.filter(tx => tx.id !== t.id))}
+                    onClick={() => handleDeleteMileage(t.id)}
                     style={{
                       backgroundColor: '#ef4444',
                       color: 'white',
