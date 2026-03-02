@@ -17,13 +17,15 @@ const normalizeReservationData = (rawData) => {
   const hasDogs = source.dogs ?? source.hasDogs;
   const rawEmail = source.email || guest.email || '';
   const normalizedEmail = typeof rawEmail === 'string' && rawEmail.toLowerCase().includes('@guest.local') ? '' : rawEmail;
+  const normalizedLockCode = String(source.lockCode ?? '').trim();
 
   return {
     ...source,
     confirmationNumber: source.confirmationNumber || source.confirmation || source.referenceNumber || '',
+    reservationFrom: source.reservationFrom || source.reservationSource || source.reservationPlatform || source.platform || 'ABB',
     checkInDate: source.checkInDate || source.checkIn || source.arrivalDate || '',
     checkoutDate: source.checkoutDate || source.checkOutDate || source.checkOut || source.departureDate || '',
-    lockCode: source.lockCode || '',
+    lockCode: normalizedLockCode.toUpperCase() === 'NEED' ? 'Will update 24 hours before stay' : normalizedLockCode,
     propertyId: source.propertyId || property.id || property.propertyId || '',
     customerId: source.customerId || source.userId || guest.id || guest.userId || '',
     firstName: source.firstName || guest.firstName || '',
@@ -261,7 +263,7 @@ const GuestDashboard = () => {
           <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-pink-100 mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <p className="text-sm sm:text-base font-bold text-gray-900">Add Guest Portal to your home screen</p>
+                <p className="text-sm sm:text-base font-bold text-gray-900">Add Guest Portal to your home screen on your phone.</p>
                 <p className="text-xs sm:text-sm text-gray-600 mt-1">
                   {deferredInstallPrompt
                     ? 'Install this app for one-tap access during your stay.'
@@ -424,6 +426,12 @@ const GuestDashboard = () => {
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Lock Code</p>
                   <p className="text-2xl font-bold text-gray-900 font-mono tracking-wider">{reservationData.lockCode ? reservationData.lockCode.toString().trim() : 'N/A'}</p>
                   <p className="text-xs text-gray-600 mt-1">Required for entry</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Reservation Plateform</p>
+                  <p className="text-2xl font-bold text-gray-900">{reservationData.reservationFrom || 'ABB'}</p>
+                  <p className="text-xs text-gray-600 mt-1">Booking source</p>
                 </div>
               </div>
             </div>

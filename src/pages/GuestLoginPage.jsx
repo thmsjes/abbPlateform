@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, ArrowRight, MapPin } from 'lucide-react';
+import { KeyRound, ArrowRight, MapPin, ArrowLeft } from 'lucide-react';
 import { getReservationByReference } from '../apiCalls';
 
 const getInitialBookingReference = () => {
@@ -30,13 +30,15 @@ const normalizeReservationData = (rawData) => {
   const guest = source.guestUser || source.guest || source.customer || {};
   const property = source.propertyDetails || source.property || {};
   const hasDogs = source.dogs ?? source.hasDogs;
+  const normalizedLockCode = String(source.lockCode ?? '').trim();
 
   return {
     ...source,
     confirmationNumber: source.confirmationNumber || source.confirmation || source.referenceNumber || '',
+    reservationFrom: source.reservationFrom || source.reservationSource || source.reservationPlatform || source.platform || 'ABB',
     checkInDate: source.checkInDate || source.checkIn || source.arrivalDate || '',
     checkoutDate: source.checkoutDate || source.checkOutDate || source.checkOut || source.departureDate || '',
-    lockCode: source.lockCode || '',
+    lockCode: normalizedLockCode.toUpperCase() === 'NEED' ? 'Will update 24 hours before stay' : normalizedLockCode,
     propertyId: source.propertyId || property.id || property.propertyId || '',
     customerId: source.customerId || source.userId || guest.id || guest.userId || '',
     firstName: source.firstName || guest.firstName || '',
@@ -59,6 +61,14 @@ const GuestLogin = () => {
   const [error, setError] = useState('');
   const hasAutoSubmittedRef = useRef(false);
   const navigate = useNavigate();
+
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   const performGuestLogin = useCallback(async (referenceValue) => {
     setLoading(true);
@@ -119,6 +129,15 @@ const GuestLogin = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-6">
       <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-xl p-10 border border-pink-50 text-center">
+        <div className="flex justify-start mb-4">
+          <button
+            type="button"
+            onClick={handleGoBack}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft size={16} /> Back
+          </button>
+        </div>
         <div className="bg-pink-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 text-pink-600">
           <KeyRound size={32} />
         </div>

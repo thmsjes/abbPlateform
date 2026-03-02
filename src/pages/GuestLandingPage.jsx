@@ -318,7 +318,7 @@ const GuestLandingPage = () => {
 
                 {/* SECONDARY: Airbnb */}
                 <a 
-                  href="https://airbnb.com/h/your-property-link" 
+                  href="https://www.airbnb.com/rooms/1362936720065887297" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all"
@@ -328,7 +328,7 @@ const GuestLandingPage = () => {
 
                 {/* SECONDARY: VRBO */}
                 <a 
-                  href="https://vrbo.com/your-property-id" 
+                  href="https://vrbo.com/4518434" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all"
