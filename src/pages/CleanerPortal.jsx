@@ -58,6 +58,24 @@ if (typeof window !== 'undefined') {
   document.head.appendChild(styleEl);
 }
 
+// Helper function to parse date strings in YYYY-MM-DD format as local time
+const parseLocalDate = (dateString) => {
+  if (!dateString) return '';
+  
+  // If it's already a Date object, return as is
+  if (dateString instanceof Date) return dateString;
+  
+  // Handle YYYY-MM-DD format specifically
+  const parts = String(dateString).split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // Fallback for other formats
+  return new Date(dateString);
+};
+
 const CleanerPortal = () => {
   const navigate = useNavigate();
   const [activeView, setActiveView] = useState('reservations');
@@ -122,7 +140,7 @@ const CleanerPortal = () => {
           
           const activeTasks = allReservations
             .filter(res => {
-              const checkOut = new Date(res.checkoutDate);
+              const checkOut = parseLocalDate(res.checkoutDate);
               return checkOut >= today;
             })
             .map(res => {

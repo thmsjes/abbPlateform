@@ -4,6 +4,24 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { getReservationByReference, getPropertyById, getUserById } from '../apiCalls';
 
+// Helper function to parse date strings in YYYY-MM-DD format as local time
+const parseLocalDate = (dateString) => {
+  if (!dateString) return '';
+  
+  // If it's already a Date object, return as is
+  if (dateString instanceof Date) return dateString;
+  
+  // Handle YYYY-MM-DD format specifically
+  const parts = String(dateString).split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // Fallback for other formats
+  return new Date(dateString);
+};
+
 const normalizeReservationData = (rawData) => {
   const source = Array.isArray(rawData)
     ? rawData[0]
@@ -401,12 +419,12 @@ const GuestDashboard = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {/* Check-in */}
                 <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
-                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-In (3:00 pm)</p>
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-In (4:00 pm)</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {reservationData.checkInDate ? new Date(reservationData.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
+                    {reservationData.checkInDate ? parseLocalDate(reservationData.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">
-                    {reservationData.checkInDate ? new Date(reservationData.checkInDate).toLocaleDateString('en-US', { weekday: 'short' }) : ''}
+                    {reservationData.checkInDate ? parseLocalDate(reservationData.checkInDate).toLocaleDateString('en-US', { weekday: 'short' }) : ''}
                   </p>
                 </div>
 
@@ -414,10 +432,10 @@ const GuestDashboard = () => {
                 <div className="bg-white rounded-xl p-4 border border-gray-200 hover:border-pink-300 transition-colors">
                   <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Check-Out (10:00 am)</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {reservationData.checkoutDate ? new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
+                    {reservationData.checkoutDate ? parseLocalDate(reservationData.checkoutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">
-                    {reservationData.checkoutDate ? new Date(reservationData.checkoutDate).toLocaleDateString('en-US', { weekday: 'short' }) : ''}
+                    {reservationData.checkoutDate ? parseLocalDate(reservationData.checkoutDate).toLocaleDateString('en-US', { weekday: 'short' }) : ''}
                   </p>
                 </div>
 

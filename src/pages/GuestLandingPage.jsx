@@ -19,6 +19,24 @@ import Ladyo from '../assets/ladyo.jpg'
 import Baby from '../assets/baby.jpg'
 import BeachSunset from '../assets/beachSunset.jpg'
 
+// Helper function to parse date strings in YYYY-MM-DD format as local time
+const parseLocalDate = (dateString) => {
+  if (!dateString) return new Date();
+  
+  // If it's already a Date object, return as is
+  if (dateString instanceof Date) return dateString;
+  
+  // Handle YYYY-MM-DD format specifically
+  const parts = String(dateString).split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // Fallback for other formats
+  return new Date(dateString);
+};
+
 const GuestLandingPage = () => {
   const [selectedImg, setSelectedImg] = useState(null);
   const [selectedAmenity, setSelectedAmenity] = useState(null);
@@ -62,7 +80,7 @@ const GuestLandingPage = () => {
           const transformedReviews = reviewsData.reviews.map(review => ({
             id: review.id,
             reviewerName: review.reviewerName,
-            date: review.reviewDate ? new Date(review.reviewDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '',
+            date: review.reviewDate ? parseLocalDate(review.reviewDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '',
             reviewText: review.reviewText,
             score: parseInt(review.score) || 5
           }));

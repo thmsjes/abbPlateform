@@ -5,6 +5,24 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { createExpense, addMileage, getMileage, deleteTransaction, deleteMileage } from '../apiCalls';
 
+// Helper function to parse date strings in YYYY-MM-DD format as local time
+const parseLocalDate = (dateString) => {
+  if (!dateString) return new Date();
+  
+  // If it's already a Date object, return as is
+  if (dateString instanceof Date) return dateString;
+  
+  // Handle YYYY-MM-DD format specifically
+  const parts = String(dateString).split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // Fallback for other formats
+  return new Date(dateString);
+};
+
 const TransactionModal = ({ onClose, onSave }) => {
   const [formData, setFormData] = useState({
     description: '',
@@ -247,7 +265,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
 
     const activeFilters = passedFilters || filters;
     const dateRangeText = activeFilters.dateFrom && activeFilters.dateTo 
-      ? `${new Date(activeFilters.dateFrom).toLocaleDateString()} - ${new Date(activeFilters.dateTo).toLocaleDateString()}`
+      ? `${parseLocalDate(activeFilters.dateFrom).toLocaleDateString()} - ${parseLocalDate(activeFilters.dateTo).toLocaleDateString()}`
       : 'All Dates';
 
     // Create a simple HTML representation and use browser print-to-PDF
@@ -299,7 +317,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
             <tbody>
               ${data.map(t => `
                 <tr>
-                  <td>${new Date(t.date).toLocaleDateString()}</td>
+                  <td>${parseLocalDate(t.date).toLocaleDateString()}</td>
                   <td>${t.description}</td>
                   <td>${t.category}</td>
                   <td>${t.type}</td>
@@ -355,7 +373,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
 
     // Prepare data for Excel
     const excelData = data.map(t => ({
-      'Date': new Date(t.date).toLocaleDateString(),
+      'Date': parseLocalDate(t.date).toLocaleDateString(),
       'Description': t.description,
       'Category': t.category,
       'Type': t.type,
@@ -1013,7 +1031,7 @@ const Transactions = ({ initialData = [], propertyDetails = null, filters: passe
               {filteredMileage.length > 0 ? (
                 filteredMileage.map((t) => (
                   <tr key={t.id} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-8 py-4 text-sm text-gray-600">{new Date(t.date).toLocaleDateString()}</td>
+                    <td className="px-8 py-4 text-sm text-gray-600">{parseLocalDate(t.date).toLocaleDateString()}</td>
                     <td className="px-8 py-4">
                       <span className="font-bold text-gray-900">{t.description}</span>
                     </td>

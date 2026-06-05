@@ -20,6 +20,24 @@ import {
 } from 'lucide-react';
 import { getInvoicesByProperty, getUsersByPropertyId } from '../apiCalls';
 
+// Helper function to parse date strings in YYYY-MM-DD format as local time
+const parseLocalDate = (dateString) => {
+  if (!dateString) return new Date();
+  
+  // If it's already a Date object, return as is
+  if (dateString instanceof Date) return dateString;
+  
+  // Handle YYYY-MM-DD format specifically
+  const parts = String(dateString).split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // Fallback for other formats
+  return new Date(dateString);
+};
+
 const MaintenancePortal = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -553,7 +571,7 @@ const MaintenancePortal = () => {
                               <td className="p-6 text-sm text-gray-600">{staffInfo.name}</td>
                               <td className="p-6 text-sm text-gray-600">{invoice.type}</td>
                               <td className="p-6 font-semibold text-gray-900">${parseFloat(invoice.amount).toFixed(2)}</td>
-                              <td className="p-6 text-sm text-gray-600">{new Date(invoice.dateCreated).toLocaleDateString()}</td>
+                              <td className="p-6 text-sm text-gray-600">{parseLocalDate(invoice.dateCreated).toLocaleDateString()}</td>
                               <td className="p-6">
                                 <div className="flex justify-center gap-3">
                                   <button style={{backgroundColor: '#dbeafe', color: '#000000', border: 'none', padding: '8px'}} className="rounded-xl transition-all hover:opacity-80" title="Edit invoice"><Pencil size={18} /></button>
@@ -611,7 +629,7 @@ const MaintenancePortal = () => {
               </div>
               <div>
                 <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Date Created</p>
-                <p className="text-lg font-bold text-gray-900">{new Date(selectedCompany.dateCreated).toLocaleDateString()}</p>
+                <p className="text-lg font-bold text-gray-900">{parseLocalDate(selectedCompany.dateCreated).toLocaleDateString()}</p>
               </div>
               <div>
                 <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Description</p>
